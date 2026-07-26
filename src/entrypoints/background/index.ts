@@ -5,7 +5,12 @@
 // is torn down between events, so anything held here is gone by the next one.
 
 import type { EnsureContentScriptRequest } from '$entrypoints/content/messages';
-import { cacheStats, clearCache, readConversation, writeConversation } from '$features/cache';
+import {
+  cacheStats,
+  clearCache,
+  readConversation,
+  writeConversation,
+} from '$features/cache';
 import type { CacheRequest } from '$features/cache/messages';
 import { injectScript, onInstalled, onMessage, queryTabs } from '$platform';
 
@@ -37,7 +42,9 @@ async function injectInto(tabId: number | undefined): Promise<void> {
 // Fresh page loads are handled by the manifest; this covers claude.ai tabs
 // that were already open when the extension was installed or updated.
 onInstalled(() => {
-  console.log('Claude Exporter installed/updated — re-injecting into open claude.ai tabs');
+  console.log(
+    'Claude Exporter installed/updated — re-injecting into open claude.ai tabs',
+  );
   queryTabs(CLAUDE_TABS_QUERY)
     .then((tabs) => Promise.all(tabs.map((tab) => injectInto(tab.id))))
     .catch((error) => console.log('Could not enumerate claude.ai tabs', error));
@@ -72,16 +79,21 @@ function routeCache(request: CacheRequest): Promise<unknown> | undefined {
       return clearCache().then(() => ({ success: true }));
 
     case 'cacheRead':
-      return readConversation(request.uuid, request.updatedAt).then((conversation) => ({
-        conversation,
-        success: true,
-      }));
+      return readConversation(request.uuid, request.updatedAt).then(
+        (conversation) => ({
+          conversation,
+          success: true,
+        }),
+      );
 
     case 'cacheStats':
       return cacheStats().then((stats) => ({ stats, success: true }));
 
     case 'cacheWrite':
-      return writeConversation(request.conversation).then((status) => ({ status, success: true }));
+      return writeConversation(request.conversation).then((status) => ({
+        status,
+        success: true,
+      }));
 
     default:
       return undefined;

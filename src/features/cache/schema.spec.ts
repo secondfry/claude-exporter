@@ -47,9 +47,12 @@ describe('isFresh', () => {
   });
 
   it('rejects a record fetched under a different request signature', () => {
-    expect(isFresh(record({ requestSignature: 'chat_conversations?tree=False' }), '2026-02-02T12:00:00.000000Z')).toBe(
-      false
-    );
+    expect(
+      isFresh(
+        record({ requestSignature: 'chat_conversations?tree=False' }),
+        '2026-02-02T12:00:00.000000Z',
+      ),
+    ).toBe(false);
   });
 
   it('misses when there is no record', () => {

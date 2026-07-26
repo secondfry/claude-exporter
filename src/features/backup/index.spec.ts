@@ -28,13 +28,18 @@ function makeBackup(overrides?: {
       createdAt: '2026-01-01T00:00:00.000Z',
       extensionVersion: '1.0.0',
     },
-    local: overrides?.local ?? { exportTimestamps: { b: 2 }, modelSnapshots: { a: 1 } },
+    local: overrides?.local ?? {
+      exportTimestamps: { b: 2 },
+      modelSnapshots: { a: 1 },
+    },
     sync: overrides?.sync ?? { organizationId: 'org-1' },
   };
 }
 
 function fileFor(payload: unknown): File {
-  return new File([JSON.stringify(payload)], 'b.json', { type: 'application/json' });
+  return new File([JSON.stringify(payload)], 'b.json', {
+    type: 'application/json',
+  });
 }
 
 // NOTE: the original 54-test suite (copied verbatim into every feature's
@@ -50,7 +55,10 @@ describe('mergeStorageData', () => {
   });
 
   it('keeps the local scalar value on conflict', () => {
-    const result = mergeStorageData({ dateFormat: 'dmy' }, { dateFormat: 'mdy' });
+    const result = mergeStorageData(
+      { dateFormat: 'dmy' },
+      { dateFormat: 'mdy' },
+    );
     expect(result).toEqual({ dateFormat: 'dmy' });
   });
 
@@ -94,12 +102,17 @@ describe('isBackupFile', () => {
 
   it("rejects _meta.app that isn't 'claude-exporter'", () => {
     const backup = makeBackup();
-    expect(isBackupFile({ ...backup, _meta: { ...backup._meta, app: 'other-app' } })).toBe(false);
+    expect(
+      isBackupFile({ ...backup, _meta: { ...backup._meta, app: 'other-app' } }),
+    ).toBe(false);
   });
 
   it('rejects a missing local', () => {
     const backup = makeBackup();
-    const withoutLocal: Record<string, unknown> = { _meta: backup._meta, sync: backup.sync };
+    const withoutLocal: Record<string, unknown> = {
+      _meta: backup._meta,
+      sync: backup.sync,
+    };
     expect(isBackupFile(withoutLocal)).toBe(false);
   });
 
@@ -149,11 +162,16 @@ describe('importBackup', () => {
       modelSnapshots: { a: 'local-value', c: 'backup-only' },
       onlyLocal: true,
     });
-    expect(sync).toEqual({ organizationId: 'local-org', otherSyncKey: 'added' });
+    expect(sync).toEqual({
+      organizationId: 'local-org',
+      otherSyncKey: 'added',
+    });
   });
 
   it('returns failure with a JSON-mentioning message on invalid JSON', async () => {
-    const file = new File(['{not valid json'], 'b.json', { type: 'application/json' });
+    const file = new File(['{not valid json'], 'b.json', {
+      type: 'application/json',
+    });
     const outcome = await importBackup(file, 'replace');
     expect(outcome.success).toBe(false);
     expect(outcome.message.toLowerCase()).toContain('json');

@@ -1,7 +1,7 @@
 # Claude Exporter
 
 Chrome + Firefox MV3 extension. One TypeScript source tree in `src/`, built by Vite
-into `dist/chrome/` and `dist/firefox/`. The repo root *is* the extension project.
+into `dist/chrome/` and `dist/firefox/`. The repo root _is_ the extension project.
 
 ## Critical rules
 
@@ -25,13 +25,13 @@ into `dist/chrome/` and `dist/firefox/`. The repo root *is* the extension projec
 
 ## Commands
 
-| | |
-|---|---|
-| `npm test` / `npm run test:watch` | Vitest, from repo root |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` / `npm run lint:fix` | ESLint 9 flat config (`eslint.config.ts`) |
-| `npm run build` | both targets into `dist/` |
-| `npm run dev` | chrome build, watch mode |
+|                                   |                                        |
+| --------------------------------- | -------------------------------------- |
+| `npm test` / `npm run test:watch` | Vitest, from repo root                 |
+| `npm run typecheck`               | `tsc --noEmit`                         |
+| `npm run lint` / `npm run format` | ESLint (`eslint.config.ts`) + Prettier |
+| `npm run build`                   | both targets into `dist/`              |
+| `npm run dev`                     | chrome build, watch mode               |
 
 ## Code style (differs from defaults — the rest is standard TS)
 
@@ -78,7 +78,7 @@ layer, or the browser targets — the rejected alternatives are the useful part.
   from the outer config — no plugins, no resolver. `vite-tsconfig-paths` is registered
   in both passes for exactly this reason; drop it from the inner one and the pages
   still build while `content.js`/`background.js` fail on the first aliased import.
-- The build prints "✓ built" *before* emitting `content.js`/`background.js` — a green
+- The build prints "✓ built" _before_ emitting `content.js`/`background.js` — a green
   log does not mean they exist. Check the output dir.
 - One export pipeline (`features/export/`), two callers: popup via the content script,
   browse directly from the extension origin. They each had a private copy once and

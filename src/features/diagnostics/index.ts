@@ -6,9 +6,15 @@
 // project IDs that may appear in fetch URLs or stack traces) is replaced with
 // "<id>" so we never persist identifiers.
 
-import { getManifestName, getManifestVersion, storageGet, storageSet } from '$platform';
+import {
+  getManifestName,
+  getManifestVersion,
+  storageGet,
+  storageSet,
+} from '$platform';
 
-const CE_UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const CE_UUID_REGEX =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const CE_ERROR_LOG_MAX = 50;
 
 function sanitizeForDiagnostics(value: string): string {
@@ -33,8 +39,12 @@ interface DiagnosticsOutcome {
 
 function isErrorLogEntry(value: unknown): value is ErrorLogEntry {
   if (value === null || typeof value !== 'object') return false;
-  return 'ts' in value && typeof value.ts === 'string'
-    && 'msg' in value && typeof value.msg === 'string';
+  return (
+    'ts' in value &&
+    typeof value.ts === 'string' &&
+    'msg' in value &&
+    typeof value.msg === 'string'
+  );
 }
 
 function readErrorLog(stored: unknown): ErrorLogEntry[] {
@@ -42,12 +52,16 @@ function readErrorLog(stored: unknown): ErrorLogEntry[] {
 }
 
 function countEntries(value: unknown): number {
-  return value !== null && typeof value === 'object' ? Object.keys(value).length : 0;
+  return value !== null && typeof value === 'object'
+    ? Object.keys(value).length
+    : 0;
 }
 
 /** A stack or filename that may be absent; sanitized only when present. */
 function sanitizeOptional(value: unknown): string | null {
-  return typeof value === 'string' && value ? sanitizeForDiagnostics(value) : null;
+  return typeof value === 'string' && value
+    ? sanitizeForDiagnostics(value)
+    : null;
 }
 
 interface ErrorLogStorage extends Record<string, unknown> {
@@ -86,24 +100,32 @@ function initErrorCapture(context?: string): void {
       line: event.lineno || null,
       msg: sanitizeForDiagnostics(String(event.message || '')),
       source: sanitizeOptional(event.filename),
-      stack: sanitizeOptional(event.error instanceof Error ? event.error.stack : null),
+      stack: sanitizeOptional(
+        event.error instanceof Error ? event.error.stack : null,
+      ),
       ts: new Date().toISOString(),
     });
   });
 
-  globalThis.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
-    const reason: unknown = event.reason;
-    const msg = reason instanceof Error
-      ? reason.message
-      : (reason !== undefined ? String(reason) : '(no reason)');
-    push({
-      context,
-      level: 'unhandledrejection',
-      msg: sanitizeForDiagnostics(msg),
-      stack: sanitizeOptional(reason instanceof Error ? reason.stack : null),
-      ts: new Date().toISOString(),
-    });
-  });
+  globalThis.addEventListener(
+    'unhandledrejection',
+    (event: PromiseRejectionEvent) => {
+      const reason: unknown = event.reason;
+      const msg =
+        reason instanceof Error
+          ? reason.message
+          : reason !== undefined
+            ? String(reason)
+            : '(no reason)';
+      push({
+        context,
+        level: 'unhandledrejection',
+        msg: sanitizeForDiagnostics(msg),
+        stack: sanitizeOptional(reason instanceof Error ? reason.stack : null),
+        ts: new Date().toISOString(),
+      });
+    },
+  );
 }
 
 interface DiagnosticsStorage extends Record<string, unknown> {
@@ -119,9 +141,16 @@ interface DiagnosticsStorage extends Record<string, unknown> {
 async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
   try {
     const local = await storageGet<DiagnosticsStorage>('local', [
-      'errorLog', 'modelSnapshots', 'exportTimestamps', 'dateFormat', 'timeFormat', 'modelDisplay',
+      'errorLog',
+      'modelSnapshots',
+      'exportTimestamps',
+      'dateFormat',
+      'timeFormat',
+      'modelDisplay',
     ]);
-    const sync = await storageGet<{ organizationId?: unknown }>('sync', ['organizationId']);
+    const sync = await storageGet<{ organizationId?: unknown }>('sync', [
+      'organizationId',
+    ]);
     const errorLog = readErrorLog(local.errorLog);
 
     const diagnostics = {
@@ -136,8 +165,10 @@ async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
         modelSnapshots: countEntries(local.modelSnapshots),
       },
       environment: {
-        language: (typeof navigator !== 'undefined' && navigator.language) || null,
-        userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || null,
+        language:
+          (typeof navigator !== 'undefined' && navigator.language) || null,
+        userAgent:
+          (typeof navigator !== 'undefined' && navigator.userAgent) || null,
       },
       errors: errorLog,
       extension: {
@@ -157,7 +188,9 @@ async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
     const ymd = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     const hms = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 
-    const blob = new Blob([JSON.stringify(diagnostics, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(diagnostics, null, 2)], {
+      type: 'application/json',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

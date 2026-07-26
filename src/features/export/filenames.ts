@@ -29,14 +29,21 @@ function getLocalDateTimeString(now: Date = new Date()): string {
  * `claude-artifacts` only when the ZIP holds artifacts and nothing else —
  * i.e. flat layout, no nesting, chats switched off.
  */
-function zipPrefix(options: ExportOptions): 'claude-artifacts' | 'claude-exports' {
+function zipPrefix(
+  options: ExportOptions,
+): 'claude-artifacts' | 'claude-exports' {
   const artifactsOnly =
-    options.flattenArtifacts && !options.extractArtifacts && !options.includeChats;
+    options.flattenArtifacts &&
+    !options.extractArtifacts &&
+    !options.includeChats;
   return artifactsOnly ? 'claude-artifacts' : 'claude-exports';
 }
 
 /** Name for a bulk (multi-conversation) export ZIP. */
-function bulkZipFilename(options: ExportOptions, now: Date = new Date()): string {
+function bulkZipFilename(
+  options: ExportOptions,
+  now: Date = new Date(),
+): string {
   return `${zipPrefix(options)}-${getLocalDateTimeString(now)}.zip`;
 }
 
@@ -52,7 +59,10 @@ function extensionForFormat(format: ExportFormat): string {
 }
 
 /** The transcript filename for one conversation, already sanitised. */
-function conversationFilename(displayName: string, format: ExportFormat): string {
+function conversationFilename(
+  displayName: string,
+  format: ExportFormat,
+): string {
   return `${sanitizeFilename(displayName)}.${extensionForFormat(format)}`;
 }
 

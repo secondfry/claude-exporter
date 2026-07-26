@@ -20,20 +20,24 @@ A browser extension for Chrome and Firefox that allows you to export your Claude
 - ☀️ **Light/Dark Mode** - Toggle between color schemes
 
 ---
+
 ### Installation
 
 See [docs/INSTALL.md](docs/INSTALL.md) for installation instructions (browser stores, manual, and from source).
 
 ---
+
 ### Usage
 
 #### Export Current Conversation
+
 1. Navigate to any conversation on claude.ai
 2. Click the extension icon
 3. Choose your export format and metadata preferences
 4. Click "Export Current Conversation"
 
 #### Browse All Conversations
+
 1. Click the extension icon
 2. Click "Browse All Conversations" (green button)
 3. In the browse page, you can:
@@ -42,56 +46,67 @@ See [docs/INSTALL.md](docs/INSTALL.md) for installation instructions (browser st
    - Sort by date or name
    - Export individual conversations
    - Export all filtered conversations as ZIP
-   
+
 #### Bulk Export
+
 1. In the browse page, select your format and filters
 2. Click "Export All"
 3. A progress dialog will show the export status
 4. Once complete, a ZIP file will download containing all conversations
 
 ---
+
 ### Export Formats
 
 #### JSON
+
 - Complete data including all branches and metadata
 - Best for data preservation and programmatic use
 - Includes all message versions and conversation branches
 
 #### Markdown
+
 - Human-readable format with formatting
 - Shows only the current conversation branch
 - Includes optional metadata (timestamps, model info)
 - Great for documentation or sharing
 
 #### Plain Text
+
 - Simple format following Claude's prompt style
 - Uses "User:" and "Claude:" prefixes
 - Shows only the current conversation branch
 - Ideal for copying into other LLMs or text editors
 
 ---
+
 ### Troubleshooting
 
 #### "Organization ID not configured"
+
 - Follow the setup steps in [docs/INSTALL.md](docs/INSTALL.md#configuration)
 - Make sure you're copying the complete UUID from the URL
 
 #### "Not authenticated" error
+
 - Make sure you're logged into Claude.ai
 - Try refreshing the Claude.ai page
 
 #### Export fails for some conversations
+
 - Some very old conversations might have different data structures
 - Check the browser console for specific error messages
 - The ZIP export includes a summary file listing any failed exports
 
 #### Content Security Policy errors
+
 - Make sure you're using the latest version of the extension
 - Try reloading the extension from chrome://extensions/
 
 **For browser-specific troubleshooting issues**, see [docs/INSTALL.md](docs/INSTALL.md#Troubleshooting)
 
 ---
+
 ### Known Limitations
 
 - Rate limiting: The extension processes conversations in small batches to avoid overwhelming the API
@@ -100,9 +115,10 @@ See [docs/INSTALL.md](docs/INSTALL.md) for installation instructions (browser st
 - Large bulk exports may take several minutes
 - Some special content types (like artifacts) may not export perfectly
 - API does not preserve per-message model data
-  - `conversation.model` from the API is the *current* model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
+  - `conversation.model` from the API is the _current_ model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
 
 ---
+
 ### Privacy & Security
 
 - **Local Processing**: All data processing happens in your browser
@@ -111,11 +127,13 @@ See [docs/INSTALL.md](docs/INSTALL.md) for installation instructions (browser st
 - **Open Source**: You can review all code before installation
 
 ---
+
 ### Contributing
 
 Feel free to submit issues or pull requests if you find bugs or have suggestions for improvements!
 
 ---
+
 ### Acknowledgments
 
 - **Original Project**: Forked from [socketteer/Claude-Conversation-Exporter](https://github.com/socketteer/Claude-Conversation-Exporter)

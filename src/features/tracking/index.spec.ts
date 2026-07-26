@@ -18,7 +18,11 @@ import {
   recordModelSnapshots,
 } from './index';
 
-function conv(uuid: string, updatedAt: string, model: string | null = null): ConversationSummary {
+function conv(
+  uuid: string,
+  updatedAt: string,
+  model: string | null = null,
+): ConversationSummary {
   return {
     created_at: '2026-01-01T00:00:00.000Z',
     model,
@@ -31,7 +35,9 @@ function conv(uuid: string, updatedAt: string, model: string | null = null): Con
 describe('tracking', () => {
   describe('loadExportRecords / ExportRecordBook', () => {
     it('reads the exact "exportTimestamps" storage key and treats it as the Export Record boundary', async () => {
-      await storageSet('local', { exportTimestamps: { c1: '2026-01-01T00:00:00.000Z' } });
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-01T00:00:00.000Z' },
+      });
 
       const book = await loadExportRecords();
 
@@ -39,7 +45,9 @@ describe('tracking', () => {
       // only holds if the book actually read the stored timestamp for c1.
       expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(false);
       expect(book.isStale(conv('c1', '2026-01-01T00:00:00.001Z'))).toBe(true);
-      expect(book.isStale(conv('missing', '2026-01-01T00:00:00.000Z'))).toBe(true);
+      expect(book.isStale(conv('missing', '2026-01-01T00:00:00.000Z'))).toBe(
+        true,
+      );
     });
 
     it('defaults to an empty book when nothing is stored', async () => {
@@ -59,11 +67,18 @@ describe('tracking', () => {
 
   describe('recordExports (merge semantics)', () => {
     it('stamps every uuid with the same timestamp and merges with existing records', async () => {
-      await storageSet('local', { exportTimestamps: { c1: 'stale-ts', keep: 'keep-ts' } });
+      await storageSet('local', {
+        exportTimestamps: { c1: 'stale-ts', keep: 'keep-ts' },
+      });
 
-      const book = await recordExports(['c1', 'c2'], '2026-06-01T00:00:00.000Z');
+      const book = await recordExports(
+        ['c1', 'c2'],
+        '2026-06-01T00:00:00.000Z',
+      );
 
-      const { exportTimestamps } = await storageGet<{ exportTimestamps: Record<string, string> }>('local', ['exportTimestamps']);
+      const { exportTimestamps } = await storageGet<{
+        exportTimestamps: Record<string, string>;
+      }>('local', ['exportTimestamps']);
       expect(exportTimestamps).toEqual({
         c1: '2026-06-01T00:00:00.000Z',
         c2: '2026-06-01T00:00:00.000Z',
@@ -80,7 +95,9 @@ describe('tracking', () => {
 
       const book = await recordExports(['c1']);
 
-      const { exportTimestamps } = await storageGet<{ exportTimestamps: Record<string, string> }>('local', ['exportTimestamps']);
+      const { exportTimestamps } = await storageGet<{
+        exportTimestamps: Record<string, string>;
+      }>('local', ['exportTimestamps']);
       const recordedAt = new Date(exportTimestamps.c1).getTime();
       expect(recordedAt).toBeGreaterThanOrEqual(before);
       expect(book.isStale(conv('c1', exportTimestamps.c1))).toBe(false);
@@ -111,7 +128,9 @@ describe('tracking', () => {
 
       const book = await clearExportRecords();
 
-      const stored = await storageGet<{ exportTimestamps: Record<string, string> }>('local', ['exportTimestamps']);
+      const stored = await storageGet<{
+        exportTimestamps: Record<string, string>;
+      }>('local', ['exportTimestamps']);
       expect(stored).toEqual({ exportTimestamps: {} });
       expect(book.size).toBe(0);
     });
@@ -153,18 +172,31 @@ describe('tracking', () => {
     it("a write's returned book equals a freshly-loaded one", async () => {
       const written = await recordExports(['c1'], '2026-04-01T00:00:00.000Z');
       const loaded = await loadExportRecords();
-      expect(loaded.isStale(conv('c1', '2026-04-01T00:00:00.000Z'))).toBe(written.isStale(conv('c1', '2026-04-01T00:00:00.000Z')));
-      expect(loaded.isStale(conv('c1', '2026-04-01T00:00:00.001Z'))).toBe(written.isStale(conv('c1', '2026-04-01T00:00:00.001Z')));
+      expect(loaded.isStale(conv('c1', '2026-04-01T00:00:00.000Z'))).toBe(
+        written.isStale(conv('c1', '2026-04-01T00:00:00.000Z')),
+      );
+      expect(loaded.isStale(conv('c1', '2026-04-01T00:00:00.001Z'))).toBe(
+        written.isStale(conv('c1', '2026-04-01T00:00:00.001Z')),
+      );
       expect(loaded.size).toBe(written.size);
     });
   });
 
   describe('recordModelSnapshots', () => {
     it('creates a new snapshot for a first-seen conversation', async () => {
-      await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus')]);
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus'),
+      ]);
 
       const { modelSnapshots } = await storageGet<{
-        modelSnapshots: Record<string, { current: string; firstSeen: string; history: Array<{ at: string; model: string; }> }>;
+        modelSnapshots: Record<
+          string,
+          {
+            current: string;
+            firstSeen: string;
+            history: Array<{ at: string; model: string }>;
+          }
+        >;
       }>('local', ['modelSnapshots']);
       expect(modelSnapshots.c1.firstSeen).toBe('claude-opus');
       expect(modelSnapshots.c1.current).toBe('claude-opus');
@@ -185,10 +217,19 @@ describe('tracking', () => {
         },
       });
 
-      await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new')]);
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new'),
+      ]);
 
       const { modelSnapshots } = await storageGet<{
-        modelSnapshots: Record<string, { current: string; firstSeen: string; history: Array<{ at: string; model: string; }> }>;
+        modelSnapshots: Record<
+          string,
+          {
+            current: string;
+            firstSeen: string;
+            history: Array<{ at: string; model: string }>;
+          }
+        >;
       }>('local', ['modelSnapshots']);
       const snap = modelSnapshots.c1;
       expect(snap.firstSeen).toBe('claude-old');
@@ -211,7 +252,9 @@ describe('tracking', () => {
       });
       const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');
 
-      await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', 'claude-old')]);
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-old'),
+      ]);
 
       expect(storageSetSpy).not.toHaveBeenCalled();
       storageSetSpy.mockRestore();
@@ -220,7 +263,9 @@ describe('tracking', () => {
     it('skips conversations with a null model rather than snapshotting a guess', async () => {
       const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');
 
-      await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', null)]);
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', null),
+      ]);
 
       expect(storageSetSpy).not.toHaveBeenCalled();
       storageSetSpy.mockRestore();
@@ -247,19 +292,25 @@ describe('tracking', () => {
     });
 
     it('is stale when updated_at is strictly later than the export record', async () => {
-      await storageSet('local', { exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' } });
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' },
+      });
       const book = await loadExportRecords();
       expect(book.isStale(conv('c1', '2026-01-03T00:00:00.000Z'))).toBe(true);
     });
 
     it('is NOT stale when updated_at exactly equals the export record (boundary)', async () => {
-      await storageSet('local', { exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' } });
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' },
+      });
       const book = await loadExportRecords();
       expect(book.isStale(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe(false);
     });
 
     it('is NOT stale when updated_at is earlier than the export record', async () => {
-      await storageSet('local', { exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' } });
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' },
+      });
       const book = await loadExportRecords();
       expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(false);
     });
@@ -288,46 +339,88 @@ describe('tracking', () => {
   describe('loadModelDisplay / emptyModelDisplay / ModelDisplayBook#display', () => {
     it('returns the raw model with bounced=false and no "other" when there is no snapshot', async () => {
       const book = await loadModelDisplay('original');
-      const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'));
-      expect(result).toEqual({ bounced: false, model: 'claude-x', other: '', otherLabel: '' });
+      const result = book.display(
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'),
+      );
+      expect(result).toEqual({
+        bounced: false,
+        model: 'claude-x',
+        other: '',
+        otherLabel: '',
+      });
     });
 
     it('emptyModelDisplay behaves the same as an empty loaded book', () => {
       const book = emptyModelDisplay('original');
-      const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'));
-      expect(result).toEqual({ bounced: false, model: 'claude-x', other: '', otherLabel: '' });
+      const result = book.display(
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'),
+      );
+      expect(result).toEqual({
+        bounced: false,
+        model: 'claude-x',
+        other: '',
+        otherLabel: '',
+      });
     });
 
     it('"original" preference: shows first-seen as model, current as other/"Currently" when bounced', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { current: 'claude-b', currentAt: 't1', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
+          c1: {
+            current: 'claude-b',
+            currentAt: 't1',
+            firstSeen: 'claude-a',
+            firstSeenAt: 't0',
+            history: [],
+          },
         },
       });
       const book = await loadModelDisplay('original');
 
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z'));
 
-      expect(result).toEqual({ bounced: true, model: 'claude-a', other: 'claude-b', otherLabel: 'Currently' });
+      expect(result).toEqual({
+        bounced: true,
+        model: 'claude-a',
+        other: 'claude-b',
+        otherLabel: 'Currently',
+      });
     });
 
     it('"current" preference: shows current as model, first-seen as other/"Originally" when bounced', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { current: 'claude-b', currentAt: 't1', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
+          c1: {
+            current: 'claude-b',
+            currentAt: 't1',
+            firstSeen: 'claude-a',
+            firstSeenAt: 't0',
+            history: [],
+          },
         },
       });
       const book = await loadModelDisplay('current');
 
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z'));
 
-      expect(result).toEqual({ bounced: true, model: 'claude-b', other: 'claude-a', otherLabel: 'Originally' });
+      expect(result).toEqual({
+        bounced: true,
+        model: 'claude-b',
+        other: 'claude-a',
+        otherLabel: 'Originally',
+      });
     });
 
     it('not bounced when the model never changed: still surfaces a matching "other"', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { current: 'claude-a', currentAt: 't0', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
+          c1: {
+            current: 'claude-a',
+            currentAt: 't0',
+            firstSeen: 'claude-a',
+            firstSeenAt: 't0',
+            history: [],
+          },
         },
       });
       const book = await loadModelDisplay('original');

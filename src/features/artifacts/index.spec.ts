@@ -250,7 +250,7 @@ describe('extractArtifactFiles — end-to-end', () => {
     ]);
     const files = extractArtifactFiles(data);
     expect(files).toHaveLength(2);
-    const names = files.map(f => f.filename);
+    const names = files.map((f) => f.filename);
     expect(new Set(names).size).toBe(2); // both unique
   });
 });

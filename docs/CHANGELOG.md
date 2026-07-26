@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.0]
+
+**Formatting joined the lint gate.** No behaviour changes; the extension builds the same features.
+
+- Prettier is now installed and configured (`.prettierrc.json` — pure data, so the ban on `.js` sources and JSDoc typing costs nothing; `prettier.config.ts` was skipped because TS config support is still experimental). `lint` and `format` each split into an `:eslint` and a `:prettier` half, and `lint:fix` is gone.
+- The whole tree was reformatted in one mechanical pass. Large diff, zero behaviour.
+- `.gitattributes` pins the working tree to LF. Git for Windows enables `core.autocrlf` system-wide, which would otherwise fight `endOfLine: 'lf'` forever: `format` would rewrite every file and `prettier --check` would fail on a fresh clone.
+- `baseUrl` is gone from `tsconfig.json` — deprecated, and unnecessary since TypeScript 4.1, which resolves `paths` against the tsconfig's own directory. Verified against all four consumers that read it independently: `tsc`, both `vite-tsconfig-paths` passes, vitest, and perfectionist's `tsconfig-path` import group.
+- `tseslint.config()` gave way to ESLint core's `defineConfig()`; the former is deprecated in favour of it.
+
 ## [1.17.0]
 
 **The import rules are now enforced by the build rather than by review.** No behaviour changes; nothing ships differently.
@@ -34,7 +44,7 @@
 
 **`features/tracking` deepened.** Callers now get a queryable Export Record book (`isStale`, `staleCount`, `size`) instead of a raw `{ uuid: timestamp }` map, and no longer own cache invalidation themselves — `recordExports`/`markExported`/`clearExportRecords` return the post-write book directly.
 
-- Reads and writes are serialised through a single-tail promise chain, so concurrent record writes within one JavaScript context stop losing each other. This is scoped honestly: it only orders operations *within* one context — the browse page and the content script are separate contexts and can still clobber each other across a storage round-trip. The window is one round-trip wide and the merge is additive (per-uuid stamping, not object replacement), so the worst case is a lost update, not corruption.
+- Reads and writes are serialised through a single-tail promise chain, so concurrent record writes within one JavaScript context stop losing each other. This is scoped honestly: it only orders operations _within_ one context — the browse page and the content script are separate contexts and can still clobber each other across a storage round-trip. The window is one round-trip wide and the merge is additive (per-uuid stamping, not object replacement), so the worst case is a lost update, not corruption.
 - The export pipeline now writes the Export Record for every Conversation it succeeds on, from inside `features/export/`, so the four call sites that previously each had to remember to call `recordExports` themselves can no longer forget.
 - Browse no longer writes the `exportTimestamps` storage key directly — it goes through `features/tracking` like every other caller.
 - Fixed: a first-seen Conversation showed its raw API model in the browse table until the page was reloaded, instead of picking up the snapshot recorded moments earlier.

@@ -48,7 +48,10 @@ interface CacheRecord {
  * parsed dates keeps a reformatted timestamp a miss, which costs one fetch;
  * the alternative failure costs the user data they think they have.
  */
-function isFresh(record: CacheRecord | undefined, updatedAt: string | undefined): boolean {
+function isFresh(
+  record: CacheRecord | undefined,
+  updatedAt: string | undefined,
+): boolean {
   if (!record || !updatedAt) return false;
   if (record.requestSignature !== REQUEST_SIGNATURE) return false;
   return record.updatedAt === updatedAt;

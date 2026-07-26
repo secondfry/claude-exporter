@@ -27,7 +27,8 @@ const withEslint8ContextAccessors = (plugin: {
             new Proxy(context, {
               get(target, property) {
                 if (property === 'getFilename') return () => target.filename;
-                if (property === 'getSourceCode') return () => target.sourceCode;
+                if (property === 'getSourceCode')
+                  return () => target.sourceCode;
                 const value: unknown = Reflect.get(target, property);
                 return value;
               },

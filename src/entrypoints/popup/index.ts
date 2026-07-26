@@ -35,7 +35,9 @@ type ExportResponse = ContentExportResponse | FailureResponse;
 
 // Get organization ID from storage (fallback)
 async function getStoredOrgId(): Promise<string | undefined> {
-  const result = await storageGet<{ organizationId?: string }>('sync', ['organizationId']);
+  const result = await storageGet<{ organizationId?: string }>('sync', [
+    'organizationId',
+  ]);
   return result.organizationId;
 }
 
@@ -45,17 +47,30 @@ async function getStoredOrgId(): Promise<string | undefined> {
 async function getOrgId(): Promise<string | undefined> {
   try {
     const [tab] = await queryTabs({ active: true, currentWindow: true });
-    if (tab && tab.url && tab.url.includes('claude.ai') && tab.id !== undefined) {
+    if (
+      tab &&
+      tab.url &&
+      tab.url.includes('claude.ai') &&
+      tab.id !== undefined
+    ) {
       try {
-        const detectOrgIdRequest: DetectOrgIdRequest = { action: 'detectOrgId' };
-        const response = await sendMessageToTab<DetectOrgIdResponse>(tab.id, detectOrgIdRequest);
+        const detectOrgIdRequest: DetectOrgIdRequest = {
+          action: 'detectOrgId',
+        };
+        const response = await sendMessageToTab<DetectOrgIdResponse>(
+          tab.id,
+          detectOrgIdRequest,
+        );
         if (response && response.success && response.orgId) {
           // Save for future use / fallback
           await storageSet('sync', { organizationId: response.orgId });
           return response.orgId;
         }
       } catch (e) {
-        console.log('Content script detectOrgId failed, trying direct detection:', e);
+        console.log(
+          'Content script detectOrgId failed, trying direct detection:',
+          e,
+        );
       }
     }
   } catch (e) {
@@ -86,26 +101,42 @@ async function getCurrentConversationId(): Promise<string | null> {
 }
 
 // Show status message
-function showStatus(message: string, type: 'error' | 'info' | 'success' = 'info'): void {
+function showStatus(
+  message: string,
+  type: 'error' | 'info' | 'success' = 'info',
+): void {
   const statusEl = document.getElementById('status');
   if (!statusEl) return;
   statusEl.className = `status ${type}`;
 
   // Swap "Options" for a clickable link when the message points users to the options page
-  if (type === 'error' && message.includes('Please set this value in Options.')) {
-    const linked = message.replace('Options.', '<a href="#" id="statusOpenOptions">Options</a>.');
+  if (
+    type === 'error' &&
+    message.includes('Please set this value in Options.')
+  ) {
+    const linked = message.replace(
+      'Options.',
+      '<a href="#" id="statusOpenOptions">Options</a>.',
+    );
     statusEl.innerHTML = linked;
-    document.getElementById('statusOpenOptions')?.addEventListener('click', e => {
-      e.preventDefault();
-      void openOptionsPage();
-    });
-  } else if (type === 'error' && (message.includes('403') || message.includes('404'))) {
+    document
+      .getElementById('statusOpenOptions')
+      ?.addEventListener('click', (e) => {
+        e.preventDefault();
+        void openOptionsPage();
+      });
+  } else if (
+    type === 'error' &&
+    (message.includes('403') || message.includes('404'))
+  ) {
     // Legacy 403/404 hint
     statusEl.innerHTML = `${message}<br>Is your <a href="#" id="statusOpenOptions">Organization ID</a> correct?`;
-    document.getElementById('statusOpenOptions')?.addEventListener('click', e => {
-      e.preventDefault();
-      void openOptionsPage();
-    });
+    document
+      .getElementById('statusOpenOptions')
+      ?.addEventListener('click', (e) => {
+        e.preventDefault();
+        void openOptionsPage();
+      });
   } else {
     statusEl.textContent = message;
   }
@@ -143,13 +174,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Handle checkbox dependencies
-  const includeChatsCheckbox = document.getElementById('includeChats') as HTMLInputElement | null;
-  const includeThinkingCheckbox = document.getElementById('includeThinking') as HTMLInputElement | null;
-  const includeMetadataCheckbox = document.getElementById('includeMetadata') as HTMLInputElement | null;
-  const includeArtifactsCheckbox = document.getElementById('includeArtifacts') as HTMLInputElement | null;
+  const includeChatsCheckbox = document.getElementById(
+    'includeChats',
+  ) as HTMLInputElement | null;
+  const includeThinkingCheckbox = document.getElementById(
+    'includeThinking',
+  ) as HTMLInputElement | null;
+  const includeMetadataCheckbox = document.getElementById(
+    'includeMetadata',
+  ) as HTMLInputElement | null;
+  const includeArtifactsCheckbox = document.getElementById(
+    'includeArtifacts',
+  ) as HTMLInputElement | null;
 
   function updateCheckboxStates(): void {
-    if (!includeChatsCheckbox || !includeThinkingCheckbox || !includeMetadataCheckbox || !includeArtifactsCheckbox) {
+    if (
+      !includeChatsCheckbox ||
+      !includeThinkingCheckbox ||
+      !includeMetadataCheckbox ||
+      !includeArtifactsCheckbox
+    ) {
       return;
     }
     const chatsEnabled = includeChatsCheckbox.checked;
@@ -172,80 +216,132 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Export current conversation
-document.getElementById('exportCurrent')?.addEventListener('click', async () => {
-  const button = document.getElementById('exportCurrent') as HTMLButtonElement | null;
-  if (button) button.disabled = true;
-  showStatus('Fetching conversation...', 'info');
-
-  try {
-    const orgId = await getOrgId();
-    const conversationId = await getCurrentConversationId();
-
-    if (!orgId) {
-      throw new Error('Failed to obtain organization ID: Please set this value in Options.');
-    }
-    if (!conversationId) {
-      throw new Error('Could not detect conversation ID. Make sure you are on a claude.ai conversation page.');
-    }
-
-    const [tab] = await queryTabs({ active: true, currentWindow: true });
-
-    // Check if we're on claude.ai
-    if (!tab || !tab.url || !tab.url.includes('claude.ai') || tab.id === undefined) {
-      throw new Error('Please navigate to a claude.ai conversation page first.');
-    }
-
-    const format = (document.getElementById('format') as HTMLSelectElement | null)?.value as
-      | ExportFormat
-      | undefined;
-    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value;
+document
+  .getElementById('exportCurrent')
+  ?.addEventListener('click', async () => {
+    const button = document.getElementById(
+      'exportCurrent',
+    ) as HTMLButtonElement | null;
+    if (button) button.disabled = true;
+    showStatus('Fetching conversation...', 'info');
 
     try {
-      // tab.title on claude.ai carries a site suffix (e.g. " - Claude") that
-      // would need brittle stripping to recover the bare conversation name,
-      // so it is intentionally not sent here. The pipeline's own fetched
-      // conversation name is the reliable source (see pipeline.ts).
-      const exportConversationRequest: ExportConversationRequest = {
-        action: 'exportConversation',
-        artifactFormat,
-        conversationId,
-        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
-        flattenArtifacts: (document.getElementById('flattenArtifacts') as HTMLInputElement | null)?.checked,
-        format,
-        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
-        includeChats: (document.getElementById('includeChats') as HTMLInputElement | null)?.checked,
-        includeMetadata: (document.getElementById('includeMetadata') as HTMLInputElement | null)?.checked,
-        includeThinking: (document.getElementById('includeThinking') as HTMLInputElement | null)?.checked,
-        orgId,
-      };
-      const response = await sendMessageToTab<ExportResponse>(tab.id, exportConversationRequest);
+      const orgId = await getOrgId();
+      const conversationId = await getCurrentConversationId();
 
-      if (response?.success) {
-        showStatus('Conversation exported successfully!', 'success');
-      } else {
-        const errorMsg = response?.error || 'Export failed';
-        console.error('Export failed:', errorMsg);
-        showStatus(errorMsg, 'error');
+      if (!orgId) {
+        throw new Error(
+          'Failed to obtain organization ID: Please set this value in Options.',
+        );
       }
+      if (!conversationId) {
+        throw new Error(
+          'Could not detect conversation ID. Make sure you are on a claude.ai conversation page.',
+        );
+      }
+
+      const [tab] = await queryTabs({ active: true, currentWindow: true });
+
+      // Check if we're on claude.ai
+      if (
+        !tab ||
+        !tab.url ||
+        !tab.url.includes('claude.ai') ||
+        tab.id === undefined
+      ) {
+        throw new Error(
+          'Please navigate to a claude.ai conversation page first.',
+        );
+      }
+
+      const format = (
+        document.getElementById('format') as HTMLSelectElement | null
+      )?.value as ExportFormat | undefined;
+      const artifactFormat = (
+        document.getElementById('artifactFormat') as HTMLSelectElement | null
+      )?.value;
+
+      try {
+        // tab.title on claude.ai carries a site suffix (e.g. " - Claude") that
+        // would need brittle stripping to recover the bare conversation name,
+        // so it is intentionally not sent here. The pipeline's own fetched
+        // conversation name is the reliable source (see pipeline.ts).
+        const exportConversationRequest: ExportConversationRequest = {
+          action: 'exportConversation',
+          artifactFormat,
+          conversationId,
+          extractArtifacts: (
+            document.getElementById(
+              'extractArtifacts',
+            ) as HTMLInputElement | null
+          )?.checked,
+          flattenArtifacts: (
+            document.getElementById(
+              'flattenArtifacts',
+            ) as HTMLInputElement | null
+          )?.checked,
+          format,
+          includeArtifacts: (
+            document.getElementById(
+              'includeArtifacts',
+            ) as HTMLInputElement | null
+          )?.checked,
+          includeChats: (
+            document.getElementById('includeChats') as HTMLInputElement | null
+          )?.checked,
+          includeMetadata: (
+            document.getElementById(
+              'includeMetadata',
+            ) as HTMLInputElement | null
+          )?.checked,
+          includeThinking: (
+            document.getElementById(
+              'includeThinking',
+            ) as HTMLInputElement | null
+          )?.checked,
+          orgId,
+        };
+        const response = await sendMessageToTab<ExportResponse>(
+          tab.id,
+          exportConversationRequest,
+        );
+
+        if (response?.success) {
+          showStatus('Conversation exported successfully!', 'success');
+        } else {
+          const errorMsg = response?.error || 'Export failed';
+          console.error('Export failed:', errorMsg);
+          showStatus(errorMsg, 'error');
+        }
+      } catch (error) {
+        console.error('Runtime error:', error);
+        showStatus(
+          `Error: ${error instanceof Error ? error.message : String(error)}`,
+          'error',
+        );
+      }
+      if (button) button.disabled = false;
     } catch (error) {
-      console.error('Runtime error:', error);
-      showStatus(`Error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      showStatus(
+        error instanceof Error ? error.message : String(error),
+        'error',
+      );
+      if (button) button.disabled = false;
     }
-    if (button) button.disabled = false;
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : String(error), 'error');
-    if (button) button.disabled = false;
-  }
-});
+  });
 
 // Browse conversations
-document.getElementById('browseConversations')?.addEventListener('click', () => {
-  void createTab({ url: getExtensionUrl('browse.html') });
-});
+document
+  .getElementById('browseConversations')
+  ?.addEventListener('click', () => {
+    void createTab({ url: getExtensionUrl('browse.html') });
+  });
 
 // Export all conversations
 document.getElementById('exportAll')?.addEventListener('click', async () => {
-  const button = document.getElementById('exportAll') as HTMLButtonElement | null;
+  const button = document.getElementById(
+    'exportAll',
+  ) as HTMLButtonElement | null;
   if (button) button.disabled = true;
   showStatus('Fetching all conversations...', 'info');
 
@@ -253,32 +349,51 @@ document.getElementById('exportAll')?.addEventListener('click', async () => {
     const orgId = await getOrgId();
 
     if (!orgId) {
-      throw new Error('Failed to obtain organization ID: Please set this value in Options.');
+      throw new Error(
+        'Failed to obtain organization ID: Please set this value in Options.',
+      );
     }
 
     const [tab] = await queryTabs({ active: true, currentWindow: true });
     if (!tab || tab.id === undefined) {
-      throw new Error('Please navigate to a claude.ai conversation page first.');
+      throw new Error(
+        'Please navigate to a claude.ai conversation page first.',
+      );
     }
 
-    const format = (document.getElementById('format') as HTMLSelectElement | null)?.value as
-      | ExportFormat
-      | undefined;
-    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value;
+    const format = (
+      document.getElementById('format') as HTMLSelectElement | null
+    )?.value as ExportFormat | undefined;
+    const artifactFormat = (
+      document.getElementById('artifactFormat') as HTMLSelectElement | null
+    )?.value;
 
     try {
       const exportAllConversationsRequest: ExportAllConversationsRequest = {
         action: 'exportAllConversations',
         artifactFormat,
-        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
-        flattenArtifacts: (document.getElementById('flattenArtifacts') as HTMLInputElement | null)?.checked,
+        extractArtifacts: (
+          document.getElementById('extractArtifacts') as HTMLInputElement | null
+        )?.checked,
+        flattenArtifacts: (
+          document.getElementById('flattenArtifacts') as HTMLInputElement | null
+        )?.checked,
         format,
-        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
-        includeChats: (document.getElementById('includeChats') as HTMLInputElement | null)?.checked,
-        includeMetadata: (document.getElementById('includeMetadata') as HTMLInputElement | null)?.checked,
+        includeArtifacts: (
+          document.getElementById('includeArtifacts') as HTMLInputElement | null
+        )?.checked,
+        includeChats: (
+          document.getElementById('includeChats') as HTMLInputElement | null
+        )?.checked,
+        includeMetadata: (
+          document.getElementById('includeMetadata') as HTMLInputElement | null
+        )?.checked,
         orgId,
       };
-      const response = await sendMessageToTab<ExportResponse>(tab.id, exportAllConversationsRequest);
+      const response = await sendMessageToTab<ExportResponse>(
+        tab.id,
+        exportAllConversationsRequest,
+      );
 
       if (response?.success) {
         if (response.warnings) {
@@ -293,7 +408,10 @@ document.getElementById('exportAll')?.addEventListener('click', async () => {
       }
     } catch (error) {
       console.error('Runtime error:', error);
-      showStatus(`Error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      showStatus(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      );
     }
     if (button) button.disabled = false;
   } catch (error) {

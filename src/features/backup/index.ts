@@ -57,7 +57,9 @@ function timestampSuffix(now: Date): string {
 }
 
 function downloadJson(filename: string, payload: unknown): void {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json',
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -83,7 +85,10 @@ async function backupExtensionData(): Promise<BackupOutcome> {
       local: local ?? {},
       sync: sync ?? {},
     };
-    downloadJson(`claude-exporter-backup-${timestampSuffix(new Date())}.json`, backup);
+    downloadJson(
+      `claude-exporter-backup-${timestampSuffix(new Date())}.json`,
+      backup,
+    );
     const snapCount = countEntries(backup.local.modelSnapshots);
     const exportCount = countEntries(backup.local.exportTimestamps);
     return {
@@ -105,7 +110,7 @@ async function backupExtensionData(): Promise<BackupOutcome> {
 // local value untouched.
 function mergeStorageData(
   current: Record<string, unknown>,
-  backup: Record<string, unknown>
+  backup: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...current };
   for (const [key, backupVal] of Object.entries(backup || {})) {
@@ -223,7 +228,9 @@ function showImportModeModal(): Promise<ImportMode | null> {
     document.body.appendChild(overlay);
 
     const selectedMode = (): ImportMode | null => {
-      const checked = overlay.querySelector('input[name="ce-import-mode"]:checked');
+      const checked = overlay.querySelector(
+        'input[name="ce-import-mode"]:checked',
+      );
       if (!(checked instanceof HTMLInputElement)) return null;
       return isImportMode(checked.value) ? checked.value : null;
     };
@@ -239,9 +246,15 @@ function showImportModeModal(): Promise<ImportMode | null> {
     };
     document.addEventListener('keydown', onKey);
 
-    overlay.querySelector('.ce-modal-cancel')?.addEventListener('click', () => cleanup(null));
-    overlay.querySelector('.ce-modal-import')?.addEventListener('click', () => cleanup(selectedMode()));
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+    overlay
+      .querySelector('.ce-modal-cancel')
+      ?.addEventListener('click', () => cleanup(null));
+    overlay
+      .querySelector('.ce-modal-import')
+      ?.addEventListener('click', () => cleanup(selectedMode()));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(null);
+    });
 
     // Focus the default radio so keyboard users can act immediately
     const firstRadio = overlay.querySelector('input[name="ce-import-mode"]');
@@ -253,17 +266,24 @@ function showImportModeModal(): Promise<ImportMode | null> {
 // Validates the file, then writes to local + sync using the supplied mode.
 // The mode choice is made BEFORE the file picker opens (see
 // showImportModeModal), so this function just executes.
-async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome> {
+async function importBackup(
+  file: File,
+  mode: ImportMode,
+): Promise<BackupOutcome> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    return { message: 'Import failed: the file is not valid JSON.', success: false };
+    return {
+      message: 'Import failed: the file is not valid JSON.',
+      success: false,
+    };
   }
 
   if (!isBackupFile(parsed)) {
     return {
-      message: 'Import failed: this does not look like a Claude Exporter backup file.',
+      message:
+        'Import failed: this does not look like a Claude Exporter backup file.',
       success: false,
     };
   }
@@ -271,7 +291,8 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
   const snapCount = countEntries(parsed.local.modelSnapshots);
   const exportCount = countEntries(parsed.local.exportTimestamps);
   const syncData = isPlainObject(parsed.sync) ? parsed.sync : {};
-  const tail = 'Reload any open Claude pages and the browse page to see the changes.';
+  const tail =
+    'Reload any open Claude pages and the browse page to see the changes.';
 
   try {
     if (mode === 'replace') {
@@ -283,9 +304,15 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
       };
     }
 
-    const currentLocal = await storageGet<Record<string, unknown>>('local', null);
+    const currentLocal = await storageGet<Record<string, unknown>>(
+      'local',
+      null,
+    );
     const currentSync = await storageGet<Record<string, unknown>>('sync', null);
-    await storageSet('local', mergeStorageData(currentLocal ?? {}, parsed.local));
+    await storageSet(
+      'local',
+      mergeStorageData(currentLocal ?? {}, parsed.local),
+    );
     await storageSet('sync', mergeStorageData(currentSync ?? {}, syncData));
     return {
       message: `Import complete (merge) — added missing entries from backup, kept your current values on overlap. ${tail}`,
@@ -299,5 +326,11 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
   }
 }
 
-export { backupExtensionData, importBackup, isBackupFile, mergeStorageData, showImportModeModal };
+export {
+  backupExtensionData,
+  importBackup,
+  isBackupFile,
+  mergeStorageData,
+  showImportModeModal,
+};
 export type { BackupOutcome, ImportMode };

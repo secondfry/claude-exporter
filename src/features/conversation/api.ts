@@ -9,7 +9,8 @@ import type { Conversation, ConversationSummary } from './types';
  * the Chat Cache's `requestSignature` depend on this exact string — changing
  * it invalidates every cached entry, so it has exactly one definition.
  */
-const CONVERSATION_QUERY = 'tree=True&rendering_mode=messages&render_all_tools=true';
+const CONVERSATION_QUERY =
+  'tree=True&rendering_mode=messages&render_all_tools=true';
 
 /** A project as returned by the organizations/{orgId}/projects endpoint. */
 interface Project {
@@ -26,7 +27,11 @@ interface Organization {
   [key: string]: unknown;
 }
 
-async function fetchJson<T>(url: string, signal: AbortSignal | undefined, notFoundLabel: string): Promise<T> {
+async function fetchJson<T>(
+  url: string,
+  signal: AbortSignal | undefined,
+  notFoundLabel: string,
+): Promise<T> {
   const response = await fetch(url, {
     credentials: 'include',
     headers: {
@@ -42,17 +47,27 @@ async function fetchJson<T>(url: string, signal: AbortSignal | undefined, notFou
   return (await response.json()) as T;
 }
 
-function fetchConversation(orgId: string, uuid: string, signal?: AbortSignal): Promise<Conversation> {
+function fetchConversation(
+  orgId: string,
+  uuid: string,
+  signal?: AbortSignal,
+): Promise<Conversation> {
   const url = `https://claude.ai/api/organizations/${orgId}/chat_conversations/${uuid}?${CONVERSATION_QUERY}`;
   return fetchJson<Conversation>(url, signal, 'conversation');
 }
 
-function fetchConversationList(orgId: string, signal?: AbortSignal): Promise<ConversationSummary[]> {
+function fetchConversationList(
+  orgId: string,
+  signal?: AbortSignal,
+): Promise<ConversationSummary[]> {
   const url = `https://claude.ai/api/organizations/${orgId}/chat_conversations`;
   return fetchJson<ConversationSummary[]>(url, signal, 'conversations');
 }
 
-function fetchProjects(orgId: string, signal?: AbortSignal): Promise<Project[]> {
+function fetchProjects(
+  orgId: string,
+  signal?: AbortSignal,
+): Promise<Project[]> {
   const url = `https://claude.ai/api/organizations/${orgId}/projects`;
   return fetchJson<Project[]>(url, signal, 'projects');
 }
@@ -61,15 +76,27 @@ function fetchProjects(orgId: string, signal?: AbortSignal): Promise<Project[]> 
 // capabilities include "chat" (the Claude.ai org, not an API-only org),
 // falling back to the first org if none match.
 async function detectOrgId(signal?: AbortSignal): Promise<string> {
-  const orgs = await fetchJson<Organization[]>('https://claude.ai/api/organizations', signal, 'organizations');
+  const orgs = await fetchJson<Organization[]>(
+    'https://claude.ai/api/organizations',
+    signal,
+    'organizations',
+  );
 
   if (!Array.isArray(orgs) || orgs.length === 0) {
     throw new Error('No organizations found');
   }
 
-  const chatOrg = orgs.find(org => org.capabilities && org.capabilities.includes('chat'));
+  const chatOrg = orgs.find(
+    (org) => org.capabilities && org.capabilities.includes('chat'),
+  );
   return chatOrg ? chatOrg.uuid : orgs[0].uuid;
 }
 
-export { CONVERSATION_QUERY, detectOrgId, fetchConversation, fetchConversationList, fetchProjects };
+export {
+  CONVERSATION_QUERY,
+  detectOrgId,
+  fetchConversation,
+  fetchConversationList,
+  fetchProjects,
+};
 export type { Project };

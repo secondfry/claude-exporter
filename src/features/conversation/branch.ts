@@ -13,7 +13,7 @@ function getCurrentBranch(data: Conversation): ChatMessage[] {
 
   // Create a map of UUID to message for quick lookup
   const messageMap = new Map<string, ChatMessage>();
-  data.chat_messages.forEach(msg => {
+  data.chat_messages.forEach((msg) => {
     messageMap.set(msg.uuid, msg);
   });
 

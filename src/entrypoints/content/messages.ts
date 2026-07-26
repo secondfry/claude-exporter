@@ -95,8 +95,7 @@ interface ContentResponseMap {
 
 /** What a caller actually receives back: the success payload, or a failure. */
 type ContentResponse<A extends ContentAction = ContentAction> =
-  | ContentResponseMap[A]
-  | FailureResponse;
+  ContentResponseMap[A] | FailureResponse;
 
 // The background script's own protocol. Kept here because the popup imports
 // both from one place; background has no other message surface.

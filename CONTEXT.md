@@ -66,6 +66,6 @@ _Avoid_: list, table, results
 
 ## Flagged ambiguities
 
-- "exported" was used to mean both *the user has a file for this* and *we hold its content locally* — resolved: those are the **Export Record** and the **Chat Cache**, and they are independent.
+- "exported" was used to mean both _the user has a file for this_ and _we hold its content locally_ — resolved: those are the **Export Record** and the **Chat Cache**, and they are independent.
 - "orphan" carries a connotation of garbage, but an **Orphan** is the only surviving copy of its Conversation — resolved: Orphans are exportable, not merely deletable. The **Chat Cache** still is not the archive; the exported file is.
 - "backup" was used for both the settings snapshot and the idea of a durable local copy of all Conversations — resolved: **Backup** means settings and **Export Records** only. A durable local copy of Conversations is not a thing this project offers; the **Chat Cache** is disposable and explicitly not a Backup.

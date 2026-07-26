@@ -40,6 +40,7 @@ For users who want to install manually without the browser stores.
 For developers or those who want to build from source:
 
 ### Prerequisites
+
 - **Chrome**: Google Chrome browser (or Chromium-based browser like Edge, Brave, etc.)
 - **Firefox**: Mozilla Firefox (version 58 or later)
 - Git (optional, for cloning)
@@ -48,6 +49,7 @@ For developers or those who want to build from source:
 ### Chrome Installation from Source
 
 1. **Clone or Download the Repository**
+
    ```bash
    git clone https://github.com/agoramachina/claude-exporter.git
    cd claude-exporter
@@ -72,6 +74,7 @@ For developers or those who want to build from source:
 #### Option 1: Temporary Installation (For Development)
 
 1. **Clone or Download the Repository** (if not already done)
+
    ```bash
    git clone https://github.com/agoramachina/claude-exporter.git
    cd claude-exporter
@@ -131,22 +134,27 @@ After installing the extension in either browser:
 ### Common Issues (Both Browsers)
 
 #### "Organization ID not configured"
+
 - Follow the [Configuration](#configuration) steps above
 - Make sure you're copying the complete UUID from the URL
 - The format should be: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 
 #### "Not authenticated" error
+
 - Make sure you're logged into Claude.ai
 - Try refreshing the Claude.ai page
 - Check that cookies are enabled for claude.ai
 
 #### "downloadFile is not defined" error
+
 If you see this error when trying to export the current conversation:
+
 1. **Refresh the Claude.ai page** (F5 or Ctrl+R)
 2. Try the export again
 3. This happens when the content script hasn't fully loaded yet
 
 #### Export fails for some conversations
+
 - Some very old conversations might have different data structures
 - Check the browser console for specific error messages
 - The ZIP export includes a summary file listing any failed exports
@@ -154,35 +162,43 @@ If you see this error when trying to export the current conversation:
 ### Chrome-Specific Issues
 
 #### Extension doesn't appear after loading
+
 - Make sure you selected the `chrome` folder, not a subfolder
 - Check that Developer mode is enabled
 - Look in the Extensions page for any error messages
 
 #### Content Security Policy errors
+
 - Make sure you're using the latest version of the extension
 - Try removing and re-adding the extension from `chrome://extensions/`
 
 ### Firefox-Specific Issues
 
 #### Extension doesn't appear after loading
+
 - Make sure you selected the `manifest.json` file, not the folder
 - Check the Browser Console (Ctrl+Shift+J) for errors
 
 #### "Could not establish connection" errors
+
 - Refresh the Claude.ai page after loading the extension
 - Check that you're on `https://claude.ai/*`
 - Try unloading and reloading the extension from `about:debugging`
 
 #### Content script not injecting
+
 - Firefox may require you to refresh Claude.ai tabs after installing the extension
 - Check the extension's permissions in `about:addons`
 
 #### Storage/Options not saving
+
 - Make sure cookies are enabled for `about:addons`
 - Try restarting Firefox
 
 #### Extension showing old UI or features after update
+
 Firefox aggressively caches extension files. To force a reload:
+
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Find "Claude Exporter" and click **Remove**
 3. Close ALL Firefox windows completely
@@ -190,17 +206,21 @@ Firefox aggressively caches extension files. To force a reload:
 5. Alternatively, hard-refresh (Ctrl+Shift+R) on Claude.ai after reloading
 
 If you still see old cached content:
+
 - Clear Firefox cache: `Ctrl+Shift+Delete` → Check "Cache" → Clear Now
 - Reload the extension from `about:debugging`
 - Refresh Claude.ai page
 
 #### "can't access property Symbol.iterator" error (Firefox)
+
 If you see this error when exporting from a conversation page:
+
 1. Make sure you're on the actual conversation page (not the home page)
 2. Refresh the page and try again
 3. If the problem persists, use "Browse All Conversations" to export instead
 
 #### "This add-on could not be installed because it has not been verified"
+
 - Use the signed `.xpi` from the Releases page, not a self-built zip
 - Or use temporary installation via `about:debugging` for development
 
@@ -213,12 +233,14 @@ If you see this error when exporting from a conversation page:
 The Firefox and Chrome versions are functionally identical but use different APIs:
 
 **Firefox version:**
+
 - Manifest V2 (more stable in Firefox)
 - `browser_action` instead of `action`
 - `tabs.executeScript()` instead of `scripting.executeScript()`
 - `options_ui` for better Firefox integration
 
 **Chrome version:**
+
 - Manifest V3 (required for Chrome)
 - `action` API
 - `scripting.executeScript()` API
@@ -230,28 +252,29 @@ All core functionality remains the same across both browsers!
 
 #### Firefox Installation Methods
 
-| Feature | Signed .xpi (Recommended) | Temporary | Unsigned (Dev Mode) |
-|---------|---------------------------|-----------|---------------------|
-| Persists after restart | ✅ | ❌ | ✅ |
-| Requires dev mode | ❌ | ❌ | ✅ |
-| Easy to install | ✅ | ✅ | ⚠️ |
-| Mozilla-signed | ✅ | N/A | ❌ |
-| Recommended for | General use | Development/testing | Advanced development |
+| Feature                | Signed .xpi (Recommended) | Temporary           | Unsigned (Dev Mode)  |
+| ---------------------- | ------------------------- | ------------------- | -------------------- |
+| Persists after restart | ✅                        | ❌                  | ✅                   |
+| Requires dev mode      | ❌                        | ❌                  | ✅                   |
+| Easy to install        | ✅                        | ✅                  | ⚠️                   |
+| Mozilla-signed         | ✅                        | N/A                 | ❌                   |
+| Recommended for        | General use               | Development/testing | Advanced development |
 
 #### Chrome Installation Methods
 
-| Feature | From Releases | From Source |
-|---------|---------------|-------------|
-| Persists after restart | ✅ | ✅ |
-| Requires dev mode | ✅ | ✅ |
-| Easy to install | ✅ | ✅ |
-| Recommended for | General use | Development |
+| Feature                | From Releases | From Source |
+| ---------------------- | ------------- | ----------- |
+| Persists after restart | ✅            | ✅          |
+| Requires dev mode      | ✅            | ✅          |
+| Easy to install        | ✅            | ✅          |
+| Recommended for        | General use   | Development |
 
 ---
 
 ## Using Both Browsers
 
 The repository includes separate folders for Chrome and Firefox, so you can easily use both:
+
 - Use the `chrome/` folder for Chrome installation
 - Use the `firefox/` folder for Firefox installation
 
@@ -262,10 +285,12 @@ Both folders are complete, standalone extensions with no need to switch files!
 ## Additional Resources
 
 ### Chrome
+
 - [Chrome Extension Developer Guide](https://developer.chrome.com/docs/extensions/)
 - [Manifest V3 Documentation](https://developer.chrome.com/docs/extensions/mv3/intro/)
 
 ### Firefox
+
 - [Firefox Extension Workshop](https://extensionworkshop.com/)
 - [WebExtensions API Reference](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions)
 - [Temporary Installation in Firefox](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/)

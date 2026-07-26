@@ -34,7 +34,8 @@ function isQuotaError(error: unknown): boolean {
 function promisify<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+    request.onerror = () =>
+      reject(request.error ?? new Error('IndexedDB request failed'));
   });
 }
 
@@ -53,10 +54,12 @@ function openDatabase(): Promise<IDBDatabase> {
       db.createObjectStore(META_STORE_NAME);
     };
 
-    request.onerror = () => reject(request.error ?? new Error('Could not open the Chat Cache'));
+    request.onerror = () =>
+      reject(request.error ?? new Error('Could not open the Chat Cache'));
     // Another context still holds the previous version open. Rejecting rather
     // than hanging keeps the export moving — it just runs uncached.
-    request.onblocked = () => reject(new Error('Chat Cache upgrade blocked by another tab'));
+    request.onblocked = () =>
+      reject(new Error('Chat Cache upgrade blocked by another tab'));
 
     request.onsuccess = () => {
       const db = request.result;
@@ -108,7 +111,9 @@ function getDatabase(): Promise<IDBDatabase> {
 async function getRecord(uuid: string): Promise<CacheRecord | undefined> {
   const db = await getDatabase();
   const tx = db.transaction(STORE_NAME, 'readonly');
-  return promisify<CacheRecord | undefined>(tx.objectStore(STORE_NAME).get(uuid));
+  return promisify<CacheRecord | undefined>(
+    tx.objectStore(STORE_NAME).get(uuid),
+  );
 }
 
 /** Resolves false when the write was refused for want of space. */

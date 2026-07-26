@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CONVERSATION_QUERY, detectOrgId, fetchConversation, fetchConversationList, fetchProjects } from './api';
+import {
+  CONVERSATION_QUERY,
+  detectOrgId,
+  fetchConversation,
+  fetchConversationList,
+  fetchProjects,
+} from './api';
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -17,13 +23,17 @@ describe('conversation/api', () => {
 
   describe('CONVERSATION_QUERY', () => {
     it('matches the exact query string the Chat Cache signature depends on', () => {
-      expect(CONVERSATION_QUERY).toBe('tree=True&rendering_mode=messages&render_all_tools=true');
+      expect(CONVERSATION_QUERY).toBe(
+        'tree=True&rendering_mode=messages&render_all_tools=true',
+      );
     });
   });
 
   describe('fetchConversation', () => {
     it('builds the exact conversation URL and passes credentials/headers', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ uuid: 'abc' }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ uuid: 'abc' }));
       vi.stubGlobal('fetch', fetchMock);
 
       const result = await fetchConversation('org1', 'conv1');
@@ -39,17 +49,24 @@ describe('conversation/api', () => {
     });
 
     it('passes the abort signal through', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ uuid: 'abc' }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ uuid: 'abc' }));
       vi.stubGlobal('fetch', fetchMock);
       const controller = new AbortController();
 
       await fetchConversation('org1', 'conv1', controller.signal);
 
-      expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: controller.signal }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: controller.signal }),
+      );
     });
 
     it('throws a descriptive error including status on non-ok response', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, false, 404));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(null, false, 404));
       vi.stubGlobal('fetch', fetchMock);
 
       await expect(fetchConversation('org1', 'conv1')).rejects.toThrow(/404/);
@@ -70,7 +87,9 @@ describe('conversation/api', () => {
     });
 
     it('throws with status on failure', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, false, 500));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(null, false, 500));
       vi.stubGlobal('fetch', fetchMock);
 
       await expect(fetchConversationList('org1')).rejects.toThrow(/500/);
@@ -91,7 +110,9 @@ describe('conversation/api', () => {
     });
 
     it('throws with status on failure', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, false, 403));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(null, false, 403));
       vi.stubGlobal('fetch', fetchMock);
 
       await expect(fetchProjects('org1')).rejects.toThrow(/403/);
@@ -110,7 +131,10 @@ describe('conversation/api', () => {
 
       const orgId = await detectOrgId();
 
-      expect(fetchMock).toHaveBeenCalledWith('https://claude.ai/api/organizations', expect.objectContaining({ credentials: 'include' }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://claude.ai/api/organizations',
+        expect.objectContaining({ credentials: 'include' }),
+      );
       expect(orgId).toBe('chat-org');
     });
 
@@ -136,7 +160,9 @@ describe('conversation/api', () => {
     });
 
     it('throws with status on non-ok response', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, false, 401));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(null, false, 401));
       vi.stubGlobal('fetch', fetchMock);
 
       await expect(detectOrgId()).rejects.toThrow(/401/);

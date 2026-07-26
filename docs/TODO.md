@@ -33,7 +33,7 @@
   real rules to warnings so the lint gate could be turned on at all, and both are
   meant to be deleted, not adjusted.
 
-  1. *Arrow functions.* `no-restricted-syntax` bans `function` declarations and
+  1. _Arrow functions._ `no-restricted-syntax` bans `function` declarations and
      expressions, and 192 currently violate it (191 declarations, 1 expression),
      with no autofixer. They cluster in `entrypoints/browse/index.ts` (33),
      `platform/index.ts` (17), `features/tracking/index.ts` (16),
@@ -41,7 +41,7 @@
      are spread one to nine per file across every other module. ESLint severity
      is per-rule rather than per-selector, so the whole rule sits at `warn` until
      the conversion lands.
-  2. *`recommendedTypeChecked` findings.* 78 pre-existing errors, mostly
+  2. _`recommendedTypeChecked` findings._ 78 pre-existing errors, mostly
      `no-misused-promises` (17, async handlers passed to `addEventListener`),
      `require-await` (15) and the `no-unsafe-*` family (~30, `any` escaping from
      DOM lookups and message responses). The `no-unsafe-*` ones overlap the DOM
@@ -51,7 +51,7 @@
      (12), `entrypoints/browse/index.ts` (8).
 
 - **`eslint-plugin-tsconfig-paths` is registered but its rule is off** — it cannot
-  be adopted as written. It rewrites *every* relative import including siblings,
+  be adopted as written. It rewrites _every_ relative import including siblings,
   which this project keeps relative on purpose, and on Windows it feeds
   `path.normalize`d patterns to picomatch v2, which reads the resulting `\` as an
   escape character so no alias ever matches. It also still calls
@@ -60,7 +60,7 @@
 
 - **`CachePort` is declared by the provider, not the consumer** — `features/export/types.ts`
   imports `CachePort` from `features/cache/messages.ts`, but the port describes what an
-  *Export* needs from a cache; `cache` is one of the two adapters satisfying it (local
+  _Export_ needs from a cache; `cache` is one of the two adapters satisfying it (local
   and relayed-through-background, per ADR-0003). As written, changing what the pipeline
   requires means editing `cache`, and any test double is typed by the module it stands
   in for. Moving the declaration into `features/export` would invert that; it is a real
@@ -97,7 +97,6 @@
   moving to a single background-worker-owned writer that both contexts relay through
   (mirroring how the Chat Cache already relays through background per ADR-0003).
 
-
 - **Prepare for new model families (e.g. Mythos)**
   - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
   - Current `formatModelName` regex in [src/features/](../src/features/) hardcodes family ∈ `{sonnet, opus, haiku}` — anything else (e.g. expected `claude-mythos-preview`) falls through to raw-ID display and gets no badge color
@@ -119,9 +118,9 @@
   - **Phase 1 capture SHIPPED (v1.9.3)** — `recordModelSnapshots()` in `src/entrypoints/content/index.ts` writes `modelSnapshots` to `chrome.storage.local` every time the conversation list is fetched (browse page load or popup "Export All"), not just on export. Stores `{firstSeen, firstSeenAt, current, currentAt, history[]}` per conversation UUID; raw API model only, never an inferred guess.
   - **Browse-table display SHIPPED (v1.9.4, revised v1.9.12, configurable v1.9.14)** — Model column shows either the original (first-seen) or current model via `getDisplayModel()`, controlled by the `modelDisplay` preference (default 'original'). Bounced chats get a `*` marker with a tooltip showing the "other" model ("Originally X" when displaying current, "Now using X" when displaying original). Options page "Model Display" section lets users switch.
   - Still pending: surface the snapshot in JSON exports (sidecar or inline field); optionally a dedicated "current model" column or filter for bounced chats
-  - `conversation.model` from the API is the *current* model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
+  - `conversation.model` from the API is the _current_ model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
   - Symptom: chats created before Sonnet 4.5 existed now show "Sonnet 4.5" because that's their current default
-  - 
+  -
   - **API does NOT preserve per-message model data** — confirmed by inspecting an exported JSON; messages have no `model` field. Anthropic doesn't track this server-side (in this endpoint at least).
   - Approach: snapshot tracking on our side
     - On every export, record `{conversationId, model, timestamp}` to `chrome.storage.local`
@@ -153,7 +152,7 @@
 - **Artifact indicators in browse table**
   - Show icon next to conversation name if it contains artifacts
   - Add filter options in funnel dropdown: with artifacts / without artifacts
-  
+
 - **Artifact search/filter in browse view**
   - Add ability to search or filter conversations by artifact content
   - Filter by artifact filename, type, or whether artifacts exist
@@ -162,7 +161,7 @@
 - **Contact dev / feedback link**
   - Add to settings dropdown on browse page
   - Way for users to reach out (feedback, bug reports)
-  
+
 - **PDF export for artifacts**
   - Generate PDF versions of artifacts
   - Useful for documentation and sharing
@@ -219,7 +218,7 @@
 - **In-popup changelog / "What's new"**
   - Link to summary of changes on version bump
   - Surfaces UI updates so changes aren't jarring
-  
+
 - **Branch export options**
   - Add option to export all branches vs. only current branch
   - Currently markdown/text only export current branch, JSON exports all
@@ -311,7 +310,7 @@
   - Fetch projects from `/api/organizations/{orgId}/projects`
   - Populate Projects dropdown with user's projects
   - Filter conversations by selected project
-  - Renamed export files from 'claude-conversations-*' to 'claude-exports-*'
+  - Renamed export files from 'claude-conversations-_' to 'claude-exports-_'
 
 - **Flat artifacts bug fix** (v1.6.1)
   - Fixed: artifacts only extracted if 'Artifacts nested' was checked

@@ -55,7 +55,10 @@ function createArea(): StubArea {
 
 function createChromeStub() {
   return {
-    permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },
+    permissions: {
+      contains: vi.fn(async () => true),
+      request: vi.fn(async () => true),
+    },
     runtime: {
       onInstalled: { addListener: vi.fn() },
       onMessage: { addListener: vi.fn() },

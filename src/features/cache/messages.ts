@@ -34,10 +34,7 @@ interface CacheClearRequest {
 }
 
 type CacheRequest =
-  | CacheClearRequest
-  | CacheReadRequest
-  | CacheStatsRequest
-  | CacheWriteRequest;
+  CacheClearRequest | CacheReadRequest | CacheStatsRequest | CacheWriteRequest;
 
 interface CacheReadResponse {
   conversation: Conversation | null;
@@ -68,7 +65,10 @@ interface CacheStatsResponse {
  * failed export.
  */
 interface CachePort {
-  read(uuid: string, updatedAt: string | undefined): Promise<Conversation | null>;
+  read(
+    uuid: string,
+    updatedAt: string | undefined,
+  ): Promise<Conversation | null>;
   write(conversation: Conversation): Promise<CacheWriteStatus>;
 }
 

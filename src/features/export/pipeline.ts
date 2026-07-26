@@ -58,7 +58,11 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-function renderConversation(data: Conversation, uuid: string, options: ExportOptions): string {
+function renderConversation(
+  data: Conversation,
+  uuid: string,
+  options: ExportOptions,
+): string {
   switch (options.format) {
     case 'markdown':
       return convertToMarkdown(
@@ -66,14 +70,14 @@ function renderConversation(data: Conversation, uuid: string, options: ExportOpt
         options.includeMetadata,
         uuid,
         options.includeArtifacts,
-        options.includeThinking
+        options.includeThinking,
       );
     case 'text':
       return convertToText(
         data,
         options.includeMetadata,
         options.includeArtifacts,
-        options.includeThinking
+        options.includeThinking,
       );
     default:
       return JSON.stringify(data, null, 2);
@@ -92,7 +96,7 @@ function buildEntries(
   target: ExportTarget,
   data: Conversation,
   options: ExportOptions,
-  nest: boolean
+  nest: boolean,
 ): ExportEntry[] {
   // The fetched conversation's own name wins: the popup cannot cheaply know the
   // title so it sends none, and the browse page's list may be stale.
@@ -101,7 +105,9 @@ function buildEntries(
   const chatFilename = conversationFilename(displayName, options.format);
 
   const artifactFiles =
-    options.extractArtifacts || options.flattenArtifacts || !options.includeChats
+    options.extractArtifacts ||
+    options.flattenArtifacts ||
+    !options.includeChats
       ? extractArtifactFiles(data, options.artifactFormat)
       : [];
 
@@ -116,7 +122,11 @@ function buildEntries(
 
   if (options.flattenArtifacts && !options.extractArtifacts) {
     if (chatContent !== null) {
-      entries.push({ content: chatContent, isChat: true, path: `Chats/${chatFilename}` });
+      entries.push({
+        content: chatContent,
+        isChat: true,
+        path: `Chats/${chatFilename}`,
+      });
     }
     for (const artifact of artifactFiles) {
       entries.push({
@@ -131,7 +141,11 @@ function buildEntries(
   if (options.extractArtifacts) {
     const base = nest ? `${safeName}/` : '';
     if (chatContent !== null) {
-      entries.push({ content: chatContent, isChat: true, path: `${base}${chatFilename}` });
+      entries.push({
+        content: chatContent,
+        isChat: true,
+        path: `${base}${chatFilename}`,
+      });
     }
     // Artifacts only get their own subfolder when there's a transcript to sit
     // beside; otherwise they'd be alone inside a pointless directory.
@@ -174,7 +188,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 async function loadConversation(
   orgId: string,
   target: ExportTarget,
-  hooks: ExportHooks | undefined
+  hooks: ExportHooks | undefined,
 ): Promise<{ cached: boolean; data: Conversation; quota: boolean }> {
   const cache = hooks?.cache;
 
@@ -183,7 +197,9 @@ async function loadConversation(
 
   const data = await fetchConversation(orgId, target.uuid, hooks?.signal);
   if (!data || !Array.isArray(data.chat_messages)) {
-    throw new Error('Invalid conversation data structure. Please refresh the page and try again.');
+    throw new Error(
+      'Invalid conversation data structure. Please refresh the page and try again.',
+    );
   }
 
   const status = cache ? await cache.write(data) : 'unavailable';
@@ -212,7 +228,7 @@ async function fetchAll(
   targets: ExportTarget[],
   options: ExportOptions,
   hooks: ExportHooks | undefined,
-  nest: boolean
+  nest: boolean,
 ): Promise<FetchOutcome> {
   const total = targets.length;
   const collected = new Map<string, ExportEntry[]>();
@@ -232,20 +248,27 @@ async function fetchAll(
     await Promise.all(
       batch.map(async (target) => {
         try {
-          const { cached, data, quota } = await loadConversation(orgId, target, hooks);
+          const { cached, data, quota } = await loadConversation(
+            orgId,
+            target,
+            hooks,
+          );
           if (cached) cacheHits++;
           else hitNetwork = true;
           if (quota) cacheQuotaExceeded = true;
 
           data.model = inferModel(data);
           collected.set(target.uuid, buildEntries(target, data, options, nest));
-          resolvedNames.set(target.uuid, data.name || target.name || target.uuid);
+          resolvedNames.set(
+            target.uuid,
+            data.name || target.name || target.uuid,
+          );
           completed++;
         } catch (error) {
           if (firstError === undefined) firstError = error;
           failedNames.push(target.name || target.uuid);
         }
-      })
+      }),
     );
 
     hooks?.onProgress?.({
@@ -325,7 +348,10 @@ async function finish({
       await recordExports(succeededIds);
     } catch (error) {
       recordsWritten = false;
-      console.warn('Failed to write Export Records for a successful export:', error);
+      console.warn(
+        'Failed to write Export Records for a successful export:',
+        error,
+      );
     }
   }
 
@@ -350,7 +376,7 @@ async function exportConversations(
   orgId: string,
   targets: ExportTarget[],
   options: ExportOptions,
-  hooks?: ExportHooks
+  hooks?: ExportHooks,
 ): Promise<ExportResult> {
   if (targets.length === 0) {
     throw new Error('Nothing to export. No conversations selected.');
@@ -365,18 +391,14 @@ async function exportConversations(
     firstError,
     resolvedNames,
     succeededIds,
-  } = await fetchAll(
-    orgId,
-    targets,
-    options,
-    hooks,
-    !single
-  );
+  } = await fetchAll(orgId, targets, options, hooks, !single);
 
   // A single-conversation export has no partial success to report, so a failed
   // fetch is the whole operation failing.
   if (single && failedNames.length > 0) {
-    throw firstError instanceof Error ? firstError : new Error(String(firstError));
+    throw firstError instanceof Error
+      ? firstError
+      : new Error(String(firstError));
   }
 
   if (entries.length === 0) {

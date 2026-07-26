@@ -9,7 +9,10 @@ import type { Conversation } from './types';
 
 describe('getCurrentBranch', () => {
   it('returns empty array when there are no messages', () => {
-    const data = { chat_messages: [], current_leaf_message_uuid: 'x' } as unknown as Conversation;
+    const data = {
+      chat_messages: [],
+      current_leaf_message_uuid: 'x',
+    } as unknown as Conversation;
     expect(getCurrentBranch(data)).toEqual([]);
   });
 

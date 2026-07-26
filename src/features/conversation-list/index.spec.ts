@@ -6,7 +6,9 @@ import type { ExportRecordBook } from '$features/tracking';
 import { createConversationList, getProjectName } from './index';
 import type { ConversationList } from './index';
 
-function conv(overrides: Partial<ConversationSummary> & { uuid: string }): ConversationSummary {
+function conv(
+  overrides: Partial<ConversationSummary> & { uuid: string },
+): ConversationSummary {
   return {
     created_at: '2024-01-01T00:00:00.000Z',
     name: 'Untitled',
@@ -28,9 +30,15 @@ describe('getProjectName', () => {
   const projects = { p1: 'Alpha' };
 
   it('falls back through project_uuid, project_id, projectUuid in order', () => {
-    expect(getProjectName(conv({ project_uuid: 'p1', uuid: 'a' }), projects)).toBe('Alpha');
-    expect(getProjectName(conv({ project_id: 'p1', uuid: 'b' }), projects)).toBe('Alpha');
-    expect(getProjectName(conv({ projectUuid: 'p1', uuid: 'c' }), projects)).toBe('Alpha');
+    expect(
+      getProjectName(conv({ project_uuid: 'p1', uuid: 'a' }), projects),
+    ).toBe('Alpha');
+    expect(
+      getProjectName(conv({ project_id: 'p1', uuid: 'b' }), projects),
+    ).toBe('Alpha');
+    expect(
+      getProjectName(conv({ projectUuid: 'p1', uuid: 'c' }), projects),
+    ).toBe('Alpha');
   });
 
   it('returns the sentinel "-" when no project key is present', () => {
@@ -38,7 +46,9 @@ describe('getProjectName', () => {
   });
 
   it('returns the sentinel "-" when the project id is unresolvable', () => {
-    expect(getProjectName(conv({ project_uuid: 'unknown', uuid: 'e' }), projects)).toBe('-');
+    expect(
+      getProjectName(conv({ project_uuid: 'unknown', uuid: 'e' }), projects),
+    ).toBe('-');
   });
 });
 
@@ -57,7 +67,9 @@ describe('createConversationList', () => {
 
     it('matches summary', () => {
       const list = setup();
-      list.setConversations([conv({ name: 'Foo', summary: 'a bar baz', uuid: 'a' })]);
+      list.setConversations([
+        conv({ name: 'Foo', summary: 'a bar baz', uuid: 'a' }),
+      ]);
       list.setSearch('bar');
       expect(list.view().map((c) => c.uuid)).toEqual(['a']);
     });
@@ -115,14 +127,20 @@ describe('createConversationList', () => {
 
     it('toggling a new field sorts ascending, pushed to primary', () => {
       const list = setup();
-      list.setConversations([conv({ name: 'B', uuid: 'a' }), conv({ name: 'A', uuid: 'b' })]);
+      list.setConversations([
+        conv({ name: 'B', uuid: 'a' }),
+        conv({ name: 'A', uuid: 'b' }),
+      ]);
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
     });
 
     it('toggling the primary field again flips direction', () => {
       const list = setup();
-      list.setConversations([conv({ name: 'B', uuid: 'a' }), conv({ name: 'A', uuid: 'b' })]);
+      list.setConversations([
+        conv({ name: 'B', uuid: 'a' }),
+        conv({ name: 'A', uuid: 'b' }),
+      ]);
       list.toggleSort('name');
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b']);
@@ -167,7 +185,10 @@ describe('createConversationList', () => {
   describe('sortValue via view ordering (field coverage)', () => {
     it('sorts by name', () => {
       const list = setup();
-      list.setConversations([conv({ name: 'b', uuid: 'a' }), conv({ name: 'a', uuid: 'b' })]);
+      list.setConversations([
+        conv({ name: 'b', uuid: 'a' }),
+        conv({ name: 'a', uuid: 'b' }),
+      ]);
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
     });
@@ -331,7 +352,11 @@ describe('createConversationList', () => {
   describe('staleCount', () => {
     it('counts Stale conversations across all(), not just the view', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a' }), conv({ uuid: 'b' }), conv({ uuid: 'c' })]);
+      list.setConversations([
+        conv({ uuid: 'a' }),
+        conv({ uuid: 'b' }),
+        conv({ uuid: 'c' }),
+      ]);
       list.setExportRecords(staleBook(['a', 'c']));
       list.setSearch('nonexistent-match'); // view is now empty
       expect(list.staleCount()).toBe(2);

@@ -48,7 +48,10 @@ function emptyModelResolver(): ModelResolver {
 // Three-way key fallback for the project id a Conversation carries, and the
 // '-' sentinel for "no project" — which deliberately leaks into filtering and
 // sort keys below.
-function getProjectName(conv: ConversationSummary, projectsMap: Record<string, string>): string {
+function getProjectName(
+  conv: ConversationSummary,
+  projectsMap: Record<string, string>,
+): string {
   const projectId =
     (typeof conv.project_uuid === 'string' ? conv.project_uuid : undefined) ||
     (typeof conv.project_id === 'string' ? conv.project_id : undefined) ||
@@ -94,7 +97,10 @@ function createConversationList(): ConversationList {
   const selectedUuids = new Set<string>();
   let lastCheckedIndex: number | null = null;
 
-  function sortValue(conv: ConversationSummary, field: SortField): number | string {
+  function sortValue(
+    conv: ConversationSummary,
+    field: SortField,
+  ): number | string {
     switch (field) {
       case 'created':
         return new Date(conv.created_at).getTime();
@@ -139,12 +145,17 @@ function createConversationList(): ConversationList {
       if (statusFilter === 'projects') {
         if (!search) return true;
         const projectName = getProjectName(conv, projectsMap);
-        return projectName !== '-' && projectName.toLowerCase().includes(search);
+        return (
+          projectName !== '-' && projectName.toLowerCase().includes(search)
+        );
       }
 
-      const summary = typeof conv.summary === 'string' ? conv.summary : undefined;
+      const summary =
+        typeof conv.summary === 'string' ? conv.summary : undefined;
       const matchesSearch =
-        !search || conv.name.toLowerCase().includes(search) || (!!summary && summary.toLowerCase().includes(search));
+        !search ||
+        conv.name.toLowerCase().includes(search) ||
+        (!!summary && summary.toLowerCase().includes(search));
 
       let matchesStatus = true;
       if (statusFilter === 'new') {
@@ -220,7 +231,9 @@ function createConversationList(): ConversationList {
       return getProjectName(conv, projectsMap);
     },
     searchPlaceholder() {
-      return statusFilter === 'projects' ? 'Search projects by name...' : 'Search conversations by name...';
+      return statusFilter === 'projects'
+        ? 'Search projects by name...'
+        : 'Search conversations by name...';
     },
     selected() {
       return selectedUuids;
@@ -281,7 +294,8 @@ function createConversationList(): ConversationList {
 
       if (existingIndex === 0) {
         // Clicking primary sort: toggle direction
-        sortStack[0].direction = sortStack[0].direction === 'asc' ? 'desc' : 'asc';
+        sortStack[0].direction =
+          sortStack[0].direction === 'asc' ? 'desc' : 'asc';
       } else if (existingIndex > 0) {
         // Clicking a secondary sort: move it to primary position
         const [criterion] = sortStack.splice(existingIndex, 1);

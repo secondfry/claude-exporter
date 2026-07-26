@@ -28,7 +28,7 @@ import { isFresh, toRecord } from './schema';
 
 async function readConversation(
   uuid: string,
-  updatedAt: string | undefined
+  updatedAt: string | undefined,
 ): Promise<Conversation | null> {
   if (!updatedAt) return null;
   try {
@@ -40,10 +40,14 @@ async function readConversation(
   }
 }
 
-async function writeConversation(conversation: Conversation): Promise<CacheWriteStatus> {
+async function writeConversation(
+  conversation: Conversation,
+): Promise<CacheWriteStatus> {
   if (!conversation?.uuid || !conversation.updated_at) return 'unavailable';
   try {
-    return (await putRecord(toRecord(conversation, Date.now()))) ? 'stored' : 'quota';
+    return (await putRecord(toRecord(conversation, Date.now())))
+      ? 'stored'
+      : 'quota';
   } catch (error) {
     console.warn('Chat Cache write failed; export unaffected', error);
     return 'unavailable';
@@ -98,7 +102,10 @@ async function ask<T>(request: CacheRequest): Promise<T | null> {
 const remoteCache: CachePort = {
   async read(uuid, updatedAt) {
     if (!updatedAt) return null;
-    const response = await ask<{ conversation: Conversation | null; success: boolean; }>({
+    const response = await ask<{
+      conversation: Conversation | null;
+      success: boolean;
+    }>({
       action: 'cacheRead',
       updatedAt,
       uuid,
@@ -107,7 +114,7 @@ const remoteCache: CachePort = {
   },
 
   async write(conversation) {
-    const response = await ask<{ status: CacheWriteStatus; success: boolean; }>({
+    const response = await ask<{ status: CacheWriteStatus; success: boolean }>({
       action: 'cacheWrite',
       conversation,
     });

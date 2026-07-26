@@ -8,12 +8,20 @@
 // RENDERING, the progress modal, export orchestration, toasts and event
 // wiring — nothing else.
 
-import { backupExtensionData, importBackup, showImportModeModal } from '$features/backup';
+import {
+  backupExtensionData,
+  importBackup,
+  showImportModeModal,
+} from '$features/backup';
 import type { ImportMode } from '$features/backup';
 import { localCache } from '$features/cache';
 import { createConversationList } from '$features/conversation-list';
 import type { SortField, StatusFilter } from '$features/conversation-list';
-import { detectOrgId, fetchConversationList, fetchProjects } from '$features/conversation/api';
+import {
+  detectOrgId,
+  fetchConversationList,
+  fetchProjects,
+} from '$features/conversation/api';
 import type { Project } from '$features/conversation/api';
 import type { ConversationSummary } from '$features/conversation/types';
 import { initErrorCapture } from '$features/diagnostics';
@@ -25,7 +33,11 @@ import type {
   ExportProgress,
   ExportTarget,
 } from '$features/export/types';
-import { formatModelName, getModelBadgeClass, inferModel } from '$features/models';
+import {
+  formatModelName,
+  getModelBadgeClass,
+  inferModel,
+} from '$features/models';
 import {
   clearExportRecords,
   loadExportRecords,
@@ -77,13 +89,19 @@ function initTheme(): void {
   if (savedTheme) {
     document.documentElement.setAttribute('data-theme', savedTheme);
   } else {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    const prefersDark = window.matchMedia(
+      '(prefers-color-scheme: dark)',
+    ).matches;
+    document.documentElement.setAttribute(
+      'data-theme',
+      prefersDark ? 'dark' : 'light',
+    );
   }
 }
 
 function toggleTheme(): void {
-  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const currentTheme =
+    document.documentElement.getAttribute('data-theme') || 'dark';
   const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
@@ -105,12 +123,18 @@ let modelDisplay: 'current' | 'original' = 'original';
 
 /** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
 function asStatusFilter(value: string | undefined): StatusFilter {
-  return value === 'new' || value === 'exported' || value === 'projects' ? value : 'all';
+  return value === 'new' || value === 'exported' || value === 'projects'
+    ? value
+    : 'all';
 }
 
 /** Narrows a `.sortable` header's dataset value to SortField without an `as` assertion. */
 function asSortField(value: string | undefined): SortField | null {
-  return value === 'name' || value === 'project' || value === 'created' || value === 'updated' || value === 'model'
+  return value === 'name' ||
+    value === 'project' ||
+    value === 'created' ||
+    value === 'updated' ||
+    value === 'model'
     ? value
     : null;
 }
@@ -120,16 +144,18 @@ function asSortField(value: string | undefined): SortField | null {
 // ---------------------------------------------------------------------------
 
 async function loadDateTimePrefs(): Promise<void> {
-  const result = await storageGet<{ dateFormat?: string; timeFormat?: string }>('local', [
-    'dateFormat',
-    'timeFormat',
-  ]);
+  const result = await storageGet<{ dateFormat?: string; timeFormat?: string }>(
+    'local',
+    ['dateFormat', 'timeFormat'],
+  );
   dateFormat = result.dateFormat === 'dmy' ? 'dmy' : 'mdy';
   timeFormat = result.timeFormat === '24h' ? '24h' : '12h';
 }
 
 async function loadModelDisplayPref(): Promise<void> {
-  const result = await storageGet<{ modelDisplay?: string }>('local', ['modelDisplay']);
+  const result = await storageGet<{ modelDisplay?: string }>('local', [
+    'modelDisplay',
+  ]);
   modelDisplay = result.modelDisplay === 'current' ? 'current' : 'original';
 }
 
@@ -142,9 +168,17 @@ function formatDate(dt: Date): string {
 
 function formatTime(dt: Date): string {
   if (timeFormat === '24h') {
-    return dt.toLocaleTimeString([], { hour: '2-digit', hour12: false, minute: '2-digit' });
+    return dt.toLocaleTimeString([], {
+      hour: '2-digit',
+      hour12: false,
+      minute: '2-digit',
+    });
   }
-  return dt.toLocaleTimeString([], { hour: '2-digit', hour12: true, minute: '2-digit' });
+  return dt.toLocaleTimeString([], {
+    hour: '2-digit',
+    hour12: true,
+    minute: '2-digit',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -247,11 +281,13 @@ async function loadOrgId(): Promise<void> {
     console.log('Auto-detect org ID failed, falling back to stored:', e);
   }
 
-  const stored = await storageGet<{ organizationId?: string }>('sync', ['organizationId']);
+  const stored = await storageGet<{ organizationId?: string }>('sync', [
+    'organizationId',
+  ]);
   orgId = stored.organizationId || null;
   if (!orgId) {
     showError(
-      'Organization ID not configured. Please open a claude.ai tab and reload this page, or configure it manually in the extension options.'
+      'Organization ID not configured. Please open a claude.ai tab and reload this page, or configure it manually in the extension options.',
     );
   }
 }
@@ -313,7 +349,8 @@ function displayConversations(): void {
   const view = list.view();
 
   if (view.length === 0) {
-    tableContent.innerHTML = '<div class="no-results">No conversations found</div>';
+    tableContent.innerHTML =
+      '<div class="no-results">No conversations found</div>';
     return;
   }
 
@@ -407,9 +444,11 @@ function displayConversations(): void {
   });
 
   // Use 'click' rather than 'change' so the shift key is observable
-  document.querySelectorAll<HTMLInputElement>('.conversation-checkbox').forEach((checkbox) => {
-    checkbox.addEventListener('click', handleCheckboxChange);
-  });
+  document
+    .querySelectorAll<HTMLInputElement>('.conversation-checkbox')
+    .forEach((checkbox) => {
+      checkbox.addEventListener('click', handleCheckboxChange);
+    });
 
   const selectAllCheckbox = el<HTMLInputElement>('selectAll');
   if (selectAllCheckbox) {
@@ -446,10 +485,12 @@ function displayConversations(): void {
 // already updated by this point, so just paint that state onto the existing
 // DOM nodes.
 function syncSelectionDom(): void {
-  document.querySelectorAll<HTMLInputElement>('.conversation-checkbox').forEach((checkbox) => {
-    const id = checkbox.dataset.id;
-    checkbox.checked = !!id && list.selected().has(id);
-  });
+  document
+    .querySelectorAll<HTMLInputElement>('.conversation-checkbox')
+    .forEach((checkbox) => {
+      const id = checkbox.dataset.id;
+      checkbox.checked = !!id && list.selected().has(id);
+    });
 
   const selectAllCheckbox = el<HTMLInputElement>('selectAll');
   if (selectAllCheckbox) selectAllCheckbox.checked = list.allViewSelected();
@@ -482,7 +523,8 @@ function updateExportButtonText(): void {
   if (!exportBtn) return;
 
   const count = list.selectedCount();
-  exportBtn.textContent = count > 0 ? `Export Selected (${count})` : 'Export All';
+  exportBtn.textContent =
+    count > 0 ? `Export Selected (${count})` : 'Export All';
 }
 
 function updateStats(): void {
@@ -562,7 +604,8 @@ function openProgressModal(initialText: string): ProgressModal {
         return;
       }
       const done = progress.completed + progress.failed;
-      const percent = progress.total > 0 ? Math.round((done / progress.total) * 100) : 0;
+      const percent =
+        progress.total > 0 ? Math.round((done / progress.total) * 100) : 0;
       bar.style.width = `${percent}%`;
       stats.textContent = `${progress.completed} succeeded, ${progress.failed} failed out of ${progress.total}`;
     },
@@ -591,14 +634,19 @@ async function exportSingle(target: ExportTarget): Promise<void> {
   showToast(`Exporting ${target.name}...`);
 
   try {
-    const result = await exportConversations(orgId, [target], options, { cache: localCache });
+    const result = await exportConversations(orgId, [target], options, {
+      cache: localCache,
+    });
     showToast(
       result.artifactCount > 0
         ? `Exported: ${target.name} with ${result.artifactCount} artifact(s)`
-        : `Exported: ${target.name}`
+        : `Exported: ${target.name}`,
     );
     if (!result.recordsWritten) {
-      showToast('Export succeeded, but could not be recorded as exported.', true);
+      showToast(
+        'Export succeeded, but could not be recorded as exported.',
+        true,
+      );
     }
     applyExportRecords(await loadExportRecords());
   } catch (error) {
@@ -625,7 +673,9 @@ async function exportAllFiltered(): Promise<void> {
   // view. The "Export Selected (N)" button text already reflects the full
   // selection count, so users aren't surprised.
   const conversationsToExport =
-    list.selectedCount() > 0 ? list.all().filter((conv) => list.selected().has(conv.uuid)) : list.view();
+    list.selectedCount() > 0
+      ? list.all().filter((conv) => list.selected().has(conv.uuid))
+      : list.view();
 
   const targets: ExportTarget[] = conversationsToExport.map((conv) => ({
     name: conv.name,
@@ -635,7 +685,9 @@ async function exportAllFiltered(): Promise<void> {
 
   const single = targets.length === 1;
   const modal = openProgressModal(
-    single ? `Exporting ${targets[0].name}...` : `Exporting ${targets.length} conversations...`
+    single
+      ? `Exporting ${targets[0].name}...`
+      : `Exporting ${targets.length} conversations...`,
   );
 
   try {
@@ -655,22 +707,33 @@ async function exportAllFiltered(): Promise<void> {
       showToast(
         result.artifactCount > 0
           ? `Exported: ${targets[0].name} with ${result.artifactCount} artifact(s)`
-          : `Exported: ${targets[0].name}`
+          : `Exported: ${targets[0].name}`,
       );
     } else if (failed > 0) {
-      showToast(`Exported ${completed} of ${targets.length} conversations (${failed} failed).`);
+      showToast(
+        `Exported ${completed} of ${targets.length} conversations (${failed} failed).`,
+      );
     } else {
-      const cached = result.fromCache > 0 ? ` (${result.fromCache} from cache)` : '';
-      showToast(`Successfully exported all ${completed} conversations!${cached}`);
+      const cached =
+        result.fromCache > 0 ? ` (${result.fromCache} from cache)` : '';
+      showToast(
+        `Successfully exported all ${completed} conversations!${cached}`,
+      );
     }
 
     // Worth saying because the next export will be slow again, but only after
     // the success message: the file the user asked for is unaffected.
     if (result.cacheQuotaExceeded) {
-      showToast('Local storage is full, so conversations are no longer being cached.', true);
+      showToast(
+        'Local storage is full, so conversations are no longer being cached.',
+        true,
+      );
     }
     if (!result.recordsWritten) {
-      showToast('Export succeeded, but could not be recorded as exported.', true);
+      showToast(
+        'Export succeeded, but could not be recorded as exported.',
+        true,
+      );
     }
 
     applyExportRecords(await loadExportRecords());
@@ -760,7 +823,8 @@ function setupEventListeners(): void {
         orgDisplay.textContent = 'Not set';
       }
       // Update theme label
-      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const theme =
+        document.documentElement.getAttribute('data-theme') || 'dark';
       req('themeLabel').textContent = theme === 'dark' ? 'Dark' : 'Light';
     }
   });
@@ -893,7 +957,9 @@ function setupEventListeners(): void {
       const statusFilter = asStatusFilter(option.dataset.value);
       list.setStatusFilter(statusFilter);
       // Update selected state
-      document.querySelectorAll('.filter-option').forEach((o) => o.classList.remove('selected'));
+      document
+        .querySelectorAll('.filter-option')
+        .forEach((o) => o.classList.remove('selected'));
       option.classList.add('selected');
       // Search bar placeholder reflects the active scope
       searchInput.placeholder = list.searchPlaceholder();
@@ -906,7 +972,9 @@ function setupEventListeners(): void {
   });
 
   // Set initial selected state
-  document.querySelector('.filter-option[data-value="all"]')?.classList.add('selected');
+  document
+    .querySelector('.filter-option[data-value="all"]')
+    ?.classList.add('selected');
 
   // Export all button
   req('exportAllBtn').addEventListener('click', () => {

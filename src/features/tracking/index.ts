@@ -26,7 +26,7 @@ interface ModelSnapshot {
   currentAt: string;
   firstSeen: string;
   firstSeenAt: string;
-  history: Array<{ at: string; model: string; }>;
+  history: Array<{ at: string; model: string }>;
 }
 
 interface ModelSnapshots {
@@ -64,12 +64,18 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function readExportRecords(): Promise<ExportRecords> {
-  const result = await storageGet<{ exportTimestamps?: ExportRecords }>('local', ['exportTimestamps']);
+  const result = await storageGet<{ exportTimestamps?: ExportRecords }>(
+    'local',
+    ['exportTimestamps'],
+  );
   return result.exportTimestamps || {};
 }
 
 async function readModelSnapshots(): Promise<ModelSnapshots> {
-  const result = await storageGet<{ modelSnapshots?: ModelSnapshots }>('local', ['modelSnapshots']);
+  const result = await storageGet<{ modelSnapshots?: ModelSnapshots }>(
+    'local',
+    ['modelSnapshots'],
+  );
   return result.modelSnapshots || {};
 }
 
@@ -125,11 +131,22 @@ function makeExportRecordBook(records: ExportRecords): ExportRecordBook {
   };
 }
 
-function makeModelDisplayBook(snapshots: ModelSnapshots, preference: ModelPreference): ModelDisplayBook {
+function makeModelDisplayBook(
+  snapshots: ModelSnapshots,
+  preference: ModelPreference,
+): ModelDisplayBook {
   return {
     display(conv) {
-      const { bounced, model, other } = getDisplayModel(conv, snapshots, preference);
-      const otherLabel: DisplayModel['otherLabel'] = !other ? '' : preference === 'current' ? 'Originally' : 'Currently';
+      const { bounced, model, other } = getDisplayModel(
+        conv,
+        snapshots,
+        preference,
+      );
+      const otherLabel: DisplayModel['otherLabel'] = !other
+        ? ''
+        : preference === 'current'
+          ? 'Originally'
+          : 'Currently';
       return { bounced, model, other, otherLabel };
     },
   };
@@ -146,7 +163,10 @@ function emptyExportRecords(): ExportRecordBook {
 // Writes an Export Record: the user got a file. Returns the post-write book
 // so callers never re-read and never own invalidation. Short-circuits
 // without writing when `uuids` is empty.
-async function recordExports(uuids: readonly string[], at: string = new Date().toISOString()): Promise<ExportRecordBook> {
+async function recordExports(
+  uuids: readonly string[],
+  at: string = new Date().toISOString(),
+): Promise<ExportRecordBook> {
   return enqueue(async () => {
     if (uuids.length === 0) {
       return makeExportRecordBook(await readExportRecords());
@@ -165,7 +185,9 @@ async function recordExports(uuids: readonly string[], at: string = new Date().t
 // defines an Export Record as "the user got a file", which is not strictly
 // true for a manual mark, but the extension has no separate concept for it,
 // so it shares recordExports' implementation and merge semantics.
-async function markExported(uuids: readonly string[]): Promise<ExportRecordBook> {
+async function markExported(
+  uuids: readonly string[],
+): Promise<ExportRecordBook> {
   return recordExports(uuids);
 }
 
@@ -176,8 +198,12 @@ async function clearExportRecords(): Promise<ExportRecordBook> {
   });
 }
 
-async function loadModelDisplay(preference: ModelPreference): Promise<ModelDisplayBook> {
-  return enqueue(async () => makeModelDisplayBook(await readModelSnapshots(), preference));
+async function loadModelDisplay(
+  preference: ModelPreference,
+): Promise<ModelDisplayBook> {
+  return enqueue(async () =>
+    makeModelDisplayBook(await readModelSnapshots(), preference),
+  );
 }
 
 function emptyModelDisplay(preference: ModelPreference): ModelDisplayBook {
@@ -187,7 +213,9 @@ function emptyModelDisplay(preference: ModelPreference): ModelDisplayBook {
 // Snapshot each conversation's current model so it survives a model bounce
 // (e.g. when a model retires and Claude silently moves old chats onto a new
 // one). Only the raw API model is recorded — never an inferred guess.
-async function recordModelSnapshots(conversations: ConversationSummary[]): Promise<void> {
+async function recordModelSnapshots(
+  conversations: ConversationSummary[],
+): Promise<void> {
   return enqueue(async () => {
     if (!Array.isArray(conversations)) return;
 
@@ -235,4 +263,9 @@ export {
   recordExports,
   recordModelSnapshots,
 };
-export type { DisplayModel, ExportRecordBook, ModelDisplayBook, ModelPreference };
+export type {
+  DisplayModel,
+  ExportRecordBook,
+  ModelDisplayBook,
+  ModelPreference,
+};

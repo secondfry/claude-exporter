@@ -15,7 +15,7 @@ const DEFAULT_MODEL_TIMELINE: ModelTimelineEntry[] = [
   { date: new Date('2025-02-24'), model: 'claude-3-7-sonnet-20250219' },
   { date: new Date('2025-05-22'), model: 'claude-sonnet-4-20250514' },
   { date: new Date('2025-09-29'), model: 'claude-sonnet-4-5-20250929' },
-  { date: new Date('2026-02-17'), model: 'claude-sonnet-4-6' }
+  { date: new Date('2026-02-17'), model: 'claude-sonnet-4-6' },
 ];
 
 // Returns conversation.model if set; otherwise infers from created_at via the timeline
@@ -45,7 +45,9 @@ function formatModelName(model: string | null | undefined): string {
   }
 
   // New format: claude-{type}-{major}[-{minor}][-{date}]
-  const newFormatMatch = model.match(/^claude-(sonnet|opus|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/i);
+  const newFormatMatch = model.match(
+    /^claude-(sonnet|opus|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/i,
+  );
   if (newFormatMatch) {
     const [, modelType, major, minor] = newFormatMatch;
     const modelName = modelType.charAt(0).toUpperCase() + modelType.slice(1);
@@ -54,7 +56,9 @@ function formatModelName(model: string | null | undefined): string {
   }
 
   // Old format: claude-{major}[-{minor}]-{type}-{date}
-  const oldFormatMatch = model.match(/^claude-(\d+)(?:-(\d+))?-(sonnet|opus|haiku)-\d{8}$/i);
+  const oldFormatMatch = model.match(
+    /^claude-(\d+)(?:-(\d+))?-(sonnet|opus|haiku)-\d{8}$/i,
+  );
   if (oldFormatMatch) {
     const [, major, minor, modelType] = oldFormatMatch;
     const modelName = modelType.charAt(0).toUpperCase() + modelType.slice(1);
@@ -74,4 +78,9 @@ function getModelBadgeClass(model: string | null | undefined): string {
   return '';
 }
 
-export { DEFAULT_MODEL_TIMELINE, formatModelName, getModelBadgeClass, inferModel };
+export {
+  DEFAULT_MODEL_TIMELINE,
+  formatModelName,
+  getModelBadgeClass,
+  inferModel,
+};

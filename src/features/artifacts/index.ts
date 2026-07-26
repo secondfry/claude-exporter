@@ -39,10 +39,15 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
       //     when `enabled_artifacts_attachments` is false. Same json_block
       //     display_content shape (language / code / filename).
       // bash, web_search, repl, view, list_directory, etc. are filtered out.
-      if (content.type === 'tool_use' &&
-          (content.name === 'artifacts' || content.name === 'create_file') &&
-          content.display_content) {
-        const displayContent = content.display_content as Record<string, unknown>;
+      if (
+        content.type === 'tool_use' &&
+        (content.name === 'artifacts' || content.name === 'create_file') &&
+        content.display_content
+      ) {
+        const displayContent = content.display_content as Record<
+          string,
+          unknown
+        >;
 
         // Check for code_block format (newer artifact format)
         if (displayContent.type === 'code_block' && displayContent.code) {
@@ -51,7 +56,10 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
           const filename = (displayContent.filename as string) || 'artifact';
 
           // Extract title from filename (remove path and extension)
-          const title = filename.split('/').pop()!.replace(/\.[^.]+$/, '');
+          const title = filename
+            .split('/')
+            .pop()!
+            .replace(/\.[^.]+$/, '');
 
           artifacts.push({
             content: code.trim(),
@@ -62,9 +70,14 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
           });
         }
         // Check for json_block format (older artifact format)
-        else if (displayContent.type === 'json_block' && displayContent.json_block) {
+        else if (
+          displayContent.type === 'json_block' &&
+          displayContent.json_block
+        ) {
           try {
-            const artifactData = JSON.parse(displayContent.json_block as string);
+            const artifactData = JSON.parse(
+              displayContent.json_block as string,
+            );
 
             // Only treat as artifact if it has a filename (real artifacts, not tool uses like bash)
             if (artifactData.filename) {
@@ -74,7 +87,10 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
               const filename = artifactData.filename;
 
               // Extract title from filename (remove path and extension)
-              const title = filename.split('/').pop().replace(/\.[^.]+$/, '');
+              const title = filename
+                .split('/')
+                .pop()
+                .replace(/\.[^.]+$/, '');
 
               artifacts.push({
                 content: code.trim(),
@@ -252,11 +268,51 @@ function getFileExtension(language: string): string {
 // Check if a language is a programming language (should be saved in original format only)
 function isProgrammingLanguage(language: string): boolean {
   const programmingLanguages = [
-    'javascript', 'typescript', 'python', 'java', 'c', 'cpp', 'c++', 'ruby', 'php',
-    'swift', 'go', 'rust', 'jsx', 'tsx', 'shell', 'bash', 'sql', 'kotlin', 'scala',
-    'r', 'perl', 'lua', 'dart', 'elixir', 'erlang', 'haskell', 'clojure', 'fsharp',
-    'f#', 'c#', 'csharp', 'objective-c', 'ocaml', 'scheme', 'lisp', 'fortran',
-    'assembly', 'asm', 'groovy', 'html', 'css', 'scss', 'sass', 'less', 'stylus'
+    'javascript',
+    'typescript',
+    'python',
+    'java',
+    'c',
+    'cpp',
+    'c++',
+    'ruby',
+    'php',
+    'swift',
+    'go',
+    'rust',
+    'jsx',
+    'tsx',
+    'shell',
+    'bash',
+    'sql',
+    'kotlin',
+    'scala',
+    'r',
+    'perl',
+    'lua',
+    'dart',
+    'elixir',
+    'erlang',
+    'haskell',
+    'clojure',
+    'fsharp',
+    'f#',
+    'c#',
+    'csharp',
+    'objective-c',
+    'ocaml',
+    'scheme',
+    'lisp',
+    'fortran',
+    'assembly',
+    'asm',
+    'groovy',
+    'html',
+    'css',
+    'scss',
+    'sass',
+    'less',
+    'stylus',
   ];
   return programmingLanguages.includes(language.toLowerCase());
 }
@@ -266,7 +322,7 @@ function convertArtifactFormat(
   content: string,
   language: string,
   baseFilename: string,
-  format: ArtifactFormat
+  format: ArtifactFormat,
 ): ArtifactFile {
   // Get original extension
   const originalExtension = getFileExtension(language);
@@ -275,7 +331,7 @@ function convertArtifactFormat(
   if (isProgrammingLanguage(language) || originalExtension !== '.md') {
     return {
       content: content,
-      filename: `${baseFilename}${originalExtension}`
+      filename: `${baseFilename}${originalExtension}`,
     };
   }
 
@@ -287,12 +343,12 @@ function convertArtifactFormat(
         content: content,
         format: 'markdown',
         language: language,
-        title: baseFilename
+        title: baseFilename,
       };
 
       return {
         content: JSON.stringify(jsonData, null, 2),
-        filename: `${baseFilename}.json`
+        filename: `${baseFilename}.json`,
       };
     }
     case 'markdown':
@@ -301,7 +357,7 @@ function convertArtifactFormat(
       // Keep as markdown
       return {
         content: content,
-        filename: `${baseFilename}.md`
+        filename: `${baseFilename}.md`,
       };
 
     case 'text': {
@@ -340,7 +396,7 @@ function convertArtifactFormat(
 
       return {
         content: plainText.trim(),
-        filename: `${baseFilename}.txt`
+        filename: `${baseFilename}.txt`,
       };
     }
 
@@ -348,7 +404,7 @@ function convertArtifactFormat(
       // Default to original format
       return {
         content: content,
-        filename: `${baseFilename}${originalExtension}`
+        filename: `${baseFilename}${originalExtension}`,
       };
   }
 }
@@ -356,7 +412,7 @@ function convertArtifactFormat(
 // Extract all artifacts from a conversation into separate files
 function extractArtifactFiles(
   data: Conversation,
-  artifactFormat: ArtifactFormat = 'original'
+  artifactFormat: ArtifactFormat = 'original',
 ): ArtifactFile[] {
   const artifactFiles: ArtifactFile[] = [];
   const usedFilenames = new Set<string>();
@@ -378,7 +434,7 @@ function extractArtifactFiles(
         artifact.content,
         artifact.language,
         baseFilename,
-        artifactFormat
+        artifactFormat,
       );
 
       let filename = converted.filename;
@@ -387,7 +443,9 @@ function extractArtifactFiles(
       let counter = 1;
       const extensionMatch = filename.match(/(\.[^.]+)$/);
       const extension = extensionMatch ? extensionMatch[1] : '';
-      const nameWithoutExt = extension ? filename.slice(0, -extension.length) : filename;
+      const nameWithoutExt = extension
+        ? filename.slice(0, -extension.length)
+        : filename;
 
       while (usedFilenames.has(filename)) {
         filename = `${nameWithoutExt}_${counter}${extension}`;
@@ -398,7 +456,7 @@ function extractArtifactFiles(
 
       artifactFiles.push({
         content: converted.content,
-        filename: filename
+        filename: filename,
       });
     }
   }

@@ -8,10 +8,18 @@
 // browse page's — see CLAUDE.md "Export Flow".
 
 import { remoteCache } from '$features/cache';
-import { detectOrgId, fetchConversationList, fetchProjects } from '$features/conversation/api';
+import {
+  detectOrgId,
+  fetchConversationList,
+  fetchProjects,
+} from '$features/conversation/api';
 import { initErrorCapture } from '$features/diagnostics';
 import { exportConversations } from '$features/export/pipeline';
-import type { ExportOptions, ExportResult, ExportTarget } from '$features/export/types';
+import type {
+  ExportOptions,
+  ExportResult,
+  ExportTarget,
+} from '$features/export/types';
 import { recordModelSnapshots } from '$features/tracking';
 import { onMessage } from '$platform';
 
@@ -44,20 +52,29 @@ const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
 
 function resolveOptions(message: ExportOptionsMessage): ExportOptions {
   return {
-    artifactFormat: message.artifactFormat ?? DEFAULT_EXPORT_OPTIONS.artifactFormat,
-    extractArtifacts: message.extractArtifacts ?? DEFAULT_EXPORT_OPTIONS.extractArtifacts,
-    flattenArtifacts: message.flattenArtifacts ?? DEFAULT_EXPORT_OPTIONS.flattenArtifacts,
+    artifactFormat:
+      message.artifactFormat ?? DEFAULT_EXPORT_OPTIONS.artifactFormat,
+    extractArtifacts:
+      message.extractArtifacts ?? DEFAULT_EXPORT_OPTIONS.extractArtifacts,
+    flattenArtifacts:
+      message.flattenArtifacts ?? DEFAULT_EXPORT_OPTIONS.flattenArtifacts,
     format: message.format ?? DEFAULT_EXPORT_OPTIONS.format,
-    includeArtifacts: message.includeArtifacts ?? DEFAULT_EXPORT_OPTIONS.includeArtifacts,
+    includeArtifacts:
+      message.includeArtifacts ?? DEFAULT_EXPORT_OPTIONS.includeArtifacts,
     includeChats: message.includeChats ?? DEFAULT_EXPORT_OPTIONS.includeChats,
-    includeMetadata: message.includeMetadata ?? DEFAULT_EXPORT_OPTIONS.includeMetadata,
-    includeThinking: message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
+    includeMetadata:
+      message.includeMetadata ?? DEFAULT_EXPORT_OPTIONS.includeMetadata,
+    includeThinking:
+      message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
   };
 }
 
 // The pipeline reports partial failures instead of throwing, so a bulk export
 // can succeed for most conversations and still say what it lost.
-function toExportResponse(result: ExportResult, attempted: number): ExportResponse {
+function toExportResponse(
+  result: ExportResult,
+  attempted: number,
+): ExportResponse {
   const response: ExportResponse = {
     count: result.exportedIds.length,
     filename: result.filename,
@@ -72,7 +89,7 @@ function toExportResponse(result: ExportResult, attempted: number): ExportRespon
 }
 
 async function handleExportConversation(
-  request: ExportConversationRequest
+  request: ExportConversationRequest,
 ): Promise<ExportResponse> {
   // No updatedAt: the popup exports whatever conversation is on screen without
   // loading the list, so there is nothing to validate a cached copy against and
@@ -81,14 +98,19 @@ async function handleExportConversation(
     name: request.conversationName || request.conversationId,
     uuid: request.conversationId,
   };
-  const result = await exportConversations(request.orgId, [target], resolveOptions(request), {
-    cache: remoteCache,
-  });
+  const result = await exportConversations(
+    request.orgId,
+    [target],
+    resolveOptions(request),
+    {
+      cache: remoteCache,
+    },
+  );
   return toExportResponse(result, 1);
 }
 
 async function handleExportAllConversations(
-  request: ExportAllConversationsRequest
+  request: ExportAllConversationsRequest,
 ): Promise<ExportResponse> {
   const conversations = await fetchConversationList(request.orgId);
   // Capture current models before any model bounce can rewrite them.
@@ -100,9 +122,14 @@ async function handleExportAllConversations(
     uuid: conv.uuid,
   }));
 
-  const result = await exportConversations(request.orgId, targets, resolveOptions(request), {
-    cache: remoteCache,
-  });
+  const result = await exportConversations(
+    request.orgId,
+    targets,
+    resolveOptions(request),
+    {
+      cache: remoteCache,
+    },
+  );
   return toExportResponse(result, targets.length);
 }
 
@@ -121,13 +148,18 @@ function route(request: ContentRequest): Promise<unknown> | undefined {
       return handleExportConversation(request);
 
     case 'loadConversations':
-      return fetchConversationList(request.orgId).then(async (conversations) => {
-        await recordModelSnapshots(conversations);
-        return { conversations, success: true };
-      });
+      return fetchConversationList(request.orgId).then(
+        async (conversations) => {
+          await recordModelSnapshots(conversations);
+          return { conversations, success: true };
+        },
+      );
 
     case 'loadProjects':
-      return fetchProjects(request.orgId).then((projects) => ({ projects, success: true }));
+      return fetchProjects(request.orgId).then((projects) => ({
+        projects,
+        success: true,
+      }));
 
     default:
       return undefined;
@@ -140,7 +172,9 @@ function route(request: ContentRequest): Promise<unknown> | undefined {
 // without this the page would end up with two message listeners.
 function init(): void {
   if (window.claudeExporterContentScriptLoaded) {
-    console.log('Claude Exporter content script already loaded, skipping re-injection');
+    console.log(
+      'Claude Exporter content script already loaded, skipping re-injection',
+    );
     return;
   }
   window.claudeExporterContentScriptLoaded = true;
@@ -151,4 +185,10 @@ function init(): void {
 
 init();
 
-export { DEFAULT_EXPORT_OPTIONS, init, resolveOptions, route, toExportResponse };
+export {
+  DEFAULT_EXPORT_OPTIONS,
+  init,
+  resolveOptions,
+  route,
+  toExportResponse,
+};

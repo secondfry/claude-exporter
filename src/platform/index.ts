@@ -12,7 +12,6 @@
 // `chrome`. Declared rather than asserted so the union is checked, and read off
 // globalThis because a bare `browser` is a ReferenceError on Chrome.
 declare global {
-   
   var browser: typeof chrome | undefined;
 }
 
@@ -38,11 +37,17 @@ function storageGet<T extends Record<string, unknown>>(
   return callApi<T>(() => api.storage[area].get(keys));
 }
 
-function storageSet(area: StorageArea, items: Record<string, unknown>): Promise<void> {
+function storageSet(
+  area: StorageArea,
+  items: Record<string, unknown>,
+): Promise<void> {
   return callApi<void>(() => api.storage[area].set(items));
 }
 
-function storageRemove(area: StorageArea, keys: string | string[]): Promise<void> {
+function storageRemove(
+  area: StorageArea,
+  keys: string | string[],
+): Promise<void> {
   return callApi<void>(() => api.storage[area].remove(keys));
 }
 
@@ -58,7 +63,9 @@ function sendMessageToRuntime<T>(message: unknown): Promise<T> {
   return callApi<T>(() => api.runtime.sendMessage<unknown, T>(message));
 }
 
-function createTab(properties: chrome.tabs.CreateProperties): Promise<chrome.tabs.Tab> {
+function createTab(
+  properties: chrome.tabs.CreateProperties,
+): Promise<chrome.tabs.Tab> {
   return callApi<chrome.tabs.Tab>(() => api.tabs.create(properties));
 }
 
@@ -66,7 +73,9 @@ function createTab(properties: chrome.tabs.CreateProperties): Promise<chrome.tab
 // only surviving code-level Chrome/Firefox difference in the old tree, and it
 // disappeared when Firefox moved to MV3 — both now take the same shape.
 function injectScript(tabId: number, files: string[]): Promise<unknown> {
-  return callApi<unknown>(() => api.scripting.executeScript({ files, target: { tabId } }));
+  return callApi<unknown>(() =>
+    api.scripting.executeScript({ files, target: { tabId } }),
+  );
 }
 
 function getExtensionUrl(path: string): string {
@@ -91,24 +100,34 @@ function openOptionsPage(): Promise<void> {
 const CLAUDE_ORIGIN = 'https://claude.ai/*';
 
 function hasClaudeAccess(): Promise<boolean> {
-  return callApi<boolean>(() => api.permissions.contains({ origins: [CLAUDE_ORIGIN] }));
+  return callApi<boolean>(() =>
+    api.permissions.contains({ origins: [CLAUDE_ORIGIN] }),
+  );
 }
 
 function requestClaudeAccess(): Promise<boolean> {
-  return callApi<boolean>(() => api.permissions.request({ origins: [CLAUDE_ORIGIN] }));
+  return callApi<boolean>(() =>
+    api.permissions.request({ origins: [CLAUDE_ORIGIN] }),
+  );
 }
 
 // Registers a message handler that may reply asynchronously. Returning true
 // from the raw listener is what keeps the message channel open; doing it here
 // once means feature code never has to remember.
 function onMessage(
-  handler: (message: any, sender: chrome.runtime.MessageSender) => Promise<unknown> | undefined,
+  handler: (
+    message: any,
+    sender: chrome.runtime.MessageSender,
+  ) => Promise<unknown> | undefined,
 ): void {
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const result = handler(message, sender);
     if (!result) return false;
-    result.then(sendResponse, error =>
-      sendResponse({ error: error instanceof Error ? error.message : String(error), success: false }),
+    result.then(sendResponse, (error) =>
+      sendResponse({
+        error: error instanceof Error ? error.message : String(error),
+        success: false,
+      }),
     );
     return true;
   });
