@@ -25,7 +25,7 @@ interface Artifact {
 // ============================================================================
 
 // Extract artifacts from message content (supports both old and new formats)
-function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
+const extractArtifactsFromMessage = (message: ChatMessage): Artifact[] => {
   const artifacts: Artifact[] = [];
 
   // Check if message has content array (new format)
@@ -122,10 +122,10 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
   }
 
   return artifacts;
-}
+};
 
 // Extract artifacts from text using regex (OLD FORMAT: <antArtifact> tags)
-function extractArtifactsFromText(text: string): Artifact[] {
+const extractArtifactsFromText = (text: string): Artifact[] => {
   const artifactRegex = /<antArtifact[^>]*>([\s\S]*?)<\/antArtifact>/g;
   const artifacts: Artifact[] = [];
   let match;
@@ -185,15 +185,15 @@ function extractArtifactsFromText(text: string): Artifact[] {
   }
 
   return artifacts;
-}
+};
 
 // Legacy function name for backward compatibility
-function extractArtifacts(text: string): Artifact[] {
+const extractArtifacts = (text: string): Artifact[] => {
   return extractArtifactsFromText(text);
-}
+};
 
 // Get file extension from language
-function getFileExtension(language: string): string {
+const getFileExtension = (language: string): string => {
   const languageToExt: Record<string, string> = {
     asm: '.asm',
     assembly: '.asm',
@@ -263,10 +263,10 @@ function getFileExtension(language: string): string {
     yml: '.yml',
   };
   return languageToExt[language.toLowerCase()] || '.txt';
-}
+};
 
 // Check if a language is a programming language (should be saved in original format only)
-function isProgrammingLanguage(language: string): boolean {
+const isProgrammingLanguage = (language: string): boolean => {
   const programmingLanguages = [
     'javascript',
     'typescript',
@@ -315,15 +315,15 @@ function isProgrammingLanguage(language: string): boolean {
     'stylus',
   ];
   return programmingLanguages.includes(language.toLowerCase());
-}
+};
 
 // Convert artifact content and filename based on selected format
-function convertArtifactFormat(
+const convertArtifactFormat = (
   content: string,
   language: string,
   baseFilename: string,
   format: ArtifactFormat,
-): ArtifactFile {
+): ArtifactFile => {
   // Get original extension
   const originalExtension = getFileExtension(language);
 
@@ -407,13 +407,13 @@ function convertArtifactFormat(
         filename: `${baseFilename}${originalExtension}`,
       };
   }
-}
+};
 
 // Extract all artifacts from a conversation into separate files
-function extractArtifactFiles(
+const extractArtifactFiles = (
   data: Conversation,
   artifactFormat: ArtifactFormat = 'original',
-): ArtifactFile[] {
+): ArtifactFile[] => {
   const artifactFiles: ArtifactFile[] = [];
   const usedFilenames = new Set<string>();
 
@@ -462,7 +462,7 @@ function extractArtifactFiles(
   }
 
   return artifactFiles;
-}
+};
 
 export {
   convertArtifactFormat,

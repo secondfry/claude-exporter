@@ -6,7 +6,7 @@
 import type { ChatMessage, Conversation } from './types';
 
 // Helper function to reconstruct the current branch from the message tree
-function getCurrentBranch(data: Conversation): ChatMessage[] {
+const getCurrentBranch = (data: Conversation): ChatMessage[] => {
   if (!data.chat_messages || !data.current_leaf_message_uuid) {
     return [];
   }
@@ -33,6 +33,6 @@ function getCurrentBranch(data: Conversation): ChatMessage[] {
   }
 
   return branch;
-}
+};
 
 export { getCurrentBranch };

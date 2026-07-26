@@ -165,7 +165,9 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
 });
 
 describe('extractArtifactFiles — end-to-end', () => {
-  function makeConversationWithMessages(messages: ChatMessage[]): Conversation {
+  const makeConversationWithMessages = (
+    messages: ChatMessage[],
+  ): Conversation => {
     const last = messages[messages.length - 1];
     return {
       chat_messages: messages,
@@ -175,7 +177,7 @@ describe('extractArtifactFiles — end-to-end', () => {
       updated_at: '2024-01-01T00:00:00Z',
       uuid: 'conv-1',
     };
-  }
+  };
 
   it('returns artifact files only from real artifact tool calls', () => {
     const data = makeConversationWithMessages([

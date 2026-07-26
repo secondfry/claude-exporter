@@ -27,11 +27,11 @@ interface Organization {
   [key: string]: unknown;
 }
 
-async function fetchJson<T>(
+const fetchJson = async <T>(
   url: string,
   signal: AbortSignal | undefined,
   notFoundLabel: string,
-): Promise<T> {
+): Promise<T> => {
   const response = await fetch(url, {
     credentials: 'include',
     headers: {
@@ -45,37 +45,37 @@ async function fetchJson<T>(
   }
 
   return (await response.json()) as T;
-}
+};
 
-function fetchConversation(
+const fetchConversation = (
   orgId: string,
   uuid: string,
   signal?: AbortSignal,
-): Promise<Conversation> {
+): Promise<Conversation> => {
   const url = `https://claude.ai/api/organizations/${orgId}/chat_conversations/${uuid}?${CONVERSATION_QUERY}`;
   return fetchJson<Conversation>(url, signal, 'conversation');
-}
+};
 
-function fetchConversationList(
+const fetchConversationList = (
   orgId: string,
   signal?: AbortSignal,
-): Promise<ConversationSummary[]> {
+): Promise<ConversationSummary[]> => {
   const url = `https://claude.ai/api/organizations/${orgId}/chat_conversations`;
   return fetchJson<ConversationSummary[]>(url, signal, 'conversations');
-}
+};
 
-function fetchProjects(
+const fetchProjects = (
   orgId: string,
   signal?: AbortSignal,
-): Promise<Project[]> {
+): Promise<Project[]> => {
   const url = `https://claude.ai/api/organizations/${orgId}/projects`;
   return fetchJson<Project[]>(url, signal, 'projects');
-}
+};
 
 // Auto-detect organization ID from the claude.ai API. Picks the org whose
 // capabilities include "chat" (the Claude.ai org, not an API-only org),
 // falling back to the first org if none match.
-async function detectOrgId(signal?: AbortSignal): Promise<string> {
+const detectOrgId = async (signal?: AbortSignal): Promise<string> => {
   const orgs = await fetchJson<Organization[]>(
     'https://claude.ai/api/organizations',
     signal,
@@ -90,7 +90,7 @@ async function detectOrgId(signal?: AbortSignal): Promise<string> {
     (org) => org.capabilities && org.capabilities.includes('chat'),
   );
   return chatOrg ? chatOrg.uuid : orgs[0].uuid;
-}
+};
 
 export {
   CONVERSATION_QUERY,

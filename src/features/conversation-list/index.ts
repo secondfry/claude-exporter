@@ -37,28 +37,28 @@ interface ModelResolver {
   };
 }
 
-function emptyModelResolver(): ModelResolver {
+const emptyModelResolver = (): ModelResolver => {
   return {
     display(conv) {
       return { model: conv.model || '' };
     },
   };
-}
+};
 
 // Three-way key fallback for the project id a Conversation carries, and the
 // '-' sentinel for "no project" — which deliberately leaks into filtering and
 // sort keys below.
-function getProjectName(
+const getProjectName = (
   conv: ConversationSummary,
   projectsMap: Record<string, string>,
-): string {
+): string => {
   const projectId =
     (typeof conv.project_uuid === 'string' ? conv.project_uuid : undefined) ||
     (typeof conv.project_id === 'string' ? conv.project_id : undefined) ||
     (typeof conv.projectUuid === 'string' ? conv.projectUuid : undefined);
   if (!projectId) return '-';
   return projectsMap[projectId] || '-';
-}
+};
 
 interface ConversationList {
   all(): readonly ConversationSummary[];
@@ -85,7 +85,7 @@ interface ConversationList {
   view(): readonly ConversationSummary[];
 }
 
-function createConversationList(): ConversationList {
+const createConversationList = (): ConversationList => {
   let allConversations: ConversationSummary[] = [];
   let viewConversations: ConversationSummary[] = [];
   let projectsMap: Record<string, string> = {};
@@ -97,10 +97,10 @@ function createConversationList(): ConversationList {
   const selectedUuids = new Set<string>();
   let lastCheckedIndex: number | null = null;
 
-  function sortValue(
+  const sortValue = (
     conv: ConversationSummary,
     field: SortField,
-  ): number | string {
+  ): number | string => {
     switch (field) {
       case 'created':
         return new Date(conv.created_at).getTime();
@@ -113,9 +113,9 @@ function createConversationList(): ConversationList {
       case 'updated':
         return new Date(conv.updated_at).getTime();
     }
-  }
+  };
 
-  function sortView(): void {
+  const sortView = (): void => {
     // If sortStack is empty, fall back to the default sort
     if (sortStack.length === 0) {
       sortStack = [{ ...DEFAULT_SORT }];
@@ -137,9 +137,9 @@ function createConversationList(): ConversationList {
       }
       return 0;
     });
-  }
+  };
 
-  function recompute(): void {
+  const recompute = (): void => {
     viewConversations = allConversations.filter((conv) => {
       // 'projects' mode: search scope becomes the project name, status filters do not apply
       if (statusFilter === 'projects') {
@@ -171,7 +171,7 @@ function createConversationList(): ConversationList {
 
     // Reset last checked index when the view changes.
     lastCheckedIndex = null;
-  }
+  };
 
   return {
     all() {
@@ -311,7 +311,7 @@ function createConversationList(): ConversationList {
       return viewConversations;
     },
   };
-}
+};
 
 export { createConversationList, getProjectName };
 export type { ConversationList, SortField, StatusFilter };

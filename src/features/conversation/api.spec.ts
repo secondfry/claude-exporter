@@ -8,13 +8,13 @@ import {
   fetchProjects,
 } from './api';
 
-function jsonResponse(body: unknown, ok = true, status = 200) {
+const jsonResponse = (body: unknown, ok = true, status = 200) => {
   return {
     ok,
     status,
     json: async () => body,
   } as Response;
-}
+};
 
 describe('conversation/api', () => {
   afterEach(() => {

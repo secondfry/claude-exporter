@@ -11,13 +11,13 @@ import { getCurrentBranch } from '$features/conversation/branch';
 import type { Conversation } from '$features/conversation/types';
 
 // Convert to markdown format
-function convertToMarkdown(
+const convertToMarkdown = (
   data: Conversation,
   includeMetadata: boolean,
   conversationId: string | null = null,
   includeArtifacts: boolean = true,
   includeThinking: boolean = true,
-): string {
+): string => {
   console.log(
     '🔧 convertToMarkdown - conversationId:',
     conversationId,
@@ -146,15 +146,15 @@ function convertToMarkdown(
   }
 
   return markdown;
-}
+};
 
 // Convert to plain text
-function convertToText(
+const convertToText = (
   data: Conversation,
   includeMetadata: boolean,
   includeArtifacts: boolean = true,
   includeThinking: boolean = true,
-): string {
+): string => {
   let text = '';
 
   // Add metadata header if requested
@@ -253,6 +253,6 @@ function convertToText(
   });
 
   return text.trim();
-}
+};
 
 export { convertToMarkdown, convertToText };

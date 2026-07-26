@@ -19,7 +19,7 @@ const DEFAULT_MODEL_TIMELINE: ModelTimelineEntry[] = [
 ];
 
 // Returns conversation.model if set; otherwise infers from created_at via the timeline
-function inferModel(conversation: Conversation): string {
+const inferModel = (conversation: Conversation): string => {
   if (conversation.model) {
     return conversation.model;
   }
@@ -30,7 +30,7 @@ function inferModel(conversation: Conversation): string {
     }
   }
   return DEFAULT_MODEL_TIMELINE[0].model;
-}
+};
 
 // Format a model ID like `claude-sonnet-4-5-20250929` into "Claude Sonnet 4.5".
 // Schema reference: https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions
@@ -39,7 +39,7 @@ function inferModel(conversation: Conversation): string {
 //   - Dated pre-4.6:        claude-{name}-{major}-{minor}-{YYYYMMDD}
 //   - Convenience alias:    claude-{name}-{major}-{minor}            (resolves to most recent dated snapshot)
 // Unknown families (anything not in `(sonnet|opus|haiku)`) fall through to raw display.
-function formatModelName(model: string | null | undefined): string {
+const formatModelName = (model: string | null | undefined): string => {
   if (!model || !model.startsWith('claude-')) {
     return model || 'Unknown';
   }
@@ -67,16 +67,16 @@ function formatModelName(model: string | null | undefined): string {
   }
 
   return model;
-}
+};
 
 // Returns CSS badge class name based on the model family
-function getModelBadgeClass(model: string | null | undefined): string {
+const getModelBadgeClass = (model: string | null | undefined): string => {
   if (!model) return '';
   if (model.includes('sonnet')) return 'sonnet';
   if (model.includes('opus')) return 'opus';
   if (model.includes('haiku')) return 'haiku';
   return '';
-}
+};
 
 export {
   DEFAULT_MODEL_TIMELINE,

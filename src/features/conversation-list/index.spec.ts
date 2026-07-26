@@ -6,25 +6,25 @@ import type { ExportRecordBook } from '$features/tracking';
 import { createConversationList, getProjectName } from './index';
 import type { ConversationList } from './index';
 
-function conv(
+const conv = (
   overrides: Partial<ConversationSummary> & { uuid: string },
-): ConversationSummary {
+): ConversationSummary => {
   return {
     created_at: '2024-01-01T00:00:00.000Z',
     name: 'Untitled',
     updated_at: '2024-01-01T00:00:00.000Z',
     ...overrides,
   };
-}
+};
 
-function staleBook(staleUuids: readonly string[]): ExportRecordBook {
+const staleBook = (staleUuids: readonly string[]): ExportRecordBook => {
   const set = new Set(staleUuids);
   return {
     size: 0,
     isStale: (c) => set.has(c.uuid),
     staleCount: (convs) => convs.filter((c) => set.has(c.uuid)).length,
   };
-}
+};
 
 describe('getProjectName', () => {
   const projects = { p1: 'Alpha' };
@@ -53,9 +53,9 @@ describe('getProjectName', () => {
 });
 
 describe('createConversationList', () => {
-  function setup(): ConversationList {
+  const setup = (): ConversationList => {
     return createConversationList();
-  }
+  };
 
   describe('search', () => {
     it('matches name, case-insensitively', () => {
@@ -243,7 +243,7 @@ describe('createConversationList', () => {
   });
 
   describe('selection', () => {
-    function fiveConvs(): ConversationSummary[] {
+    const fiveConvs = (): ConversationSummary[] => {
       return [
         conv({ name: 'A', uuid: 'a' }),
         conv({ name: 'B', uuid: 'b' }),
@@ -251,7 +251,7 @@ describe('createConversationList', () => {
         conv({ name: 'D', uuid: 'd' }),
         conv({ name: 'E', uuid: 'e' }),
       ];
-    }
+    };
 
     it('plain click toggles a single conversation', () => {
       const list = setup();
