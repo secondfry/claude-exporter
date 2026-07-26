@@ -3,6 +3,7 @@
 // see CLAUDE.md "Export Flow". Nothing here touches chrome.storage or the DOM
 // beyond the download itself; Export Records are the caller's job.
 
+import type { CachePort } from '../cache/messages';
 import type { ArtifactFormat, ExportFormat } from '../conversation/types';
 
 interface ExportOptions {
@@ -20,6 +21,13 @@ interface ExportOptions {
 interface ExportTarget {
   uuid: string;
   name: string;
+  /**
+   * `updated_at` from the conversation list. The Chat Cache may only be read
+   * for targets that carry one — it is the sole evidence that a stored copy is
+   * still current. Callers that never loaded the list (the popup exporting the
+   * open conversation) omit it and always refetch.
+   */
+  updatedAt?: string;
 }
 
 interface ExportProgress {
@@ -27,6 +35,8 @@ interface ExportProgress {
   completed: number;
   total: number;
   failed: number;
+  /** How many of `completed` came from the Chat Cache. */
+  fromCache?: number;
 }
 
 interface ExportResult {
@@ -36,11 +46,22 @@ interface ExportResult {
   artifactCount: number;
   /** The name of the file actually handed to the browser. */
   filename: string;
+  /** Conversations served from the Chat Cache instead of the network. */
+  fromCache: number;
+  /** The cache filled up mid-run. The export itself still succeeded. */
+  cacheQuotaExceeded: boolean;
 }
 
 interface ExportHooks {
   onProgress?: (progress: ExportProgress) => void;
   signal?: AbortSignal;
+  /**
+   * Where to look before fetching, and where to store what was fetched. The
+   * caller supplies it because which implementation is correct depends on the
+   * context: extension pages reach IndexedDB directly, the content script must
+   * relay to the background worker. Omitting it disables the cache entirely.
+   */
+  cache?: CachePort;
 }
 
 /** One file destined for the export, at its path inside the ZIP. */
@@ -52,6 +73,7 @@ interface ExportEntry {
 }
 
 export type {
+  CachePort,
   ExportEntry,
   ExportFormat,
   ExportHooks,

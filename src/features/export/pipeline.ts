@@ -156,9 +156,39 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Obtain one conversation, preferring the Chat Cache.
+ *
+ * The write happens immediately after the fetch and before conversion, so
+ * cancelling an export interrupts it rather than destroying everything it
+ * fetched (ADR-0002). It stores the response untouched — `inferModel` runs
+ * afterwards, on the caller's copy, so the cache keeps raw API JSON.
+ */
+async function loadConversation(
+  orgId: string,
+  target: ExportTarget,
+  hooks: ExportHooks | undefined
+): Promise<{ data: Conversation; cached: boolean; quota: boolean }> {
+  const cache = hooks?.cache;
+
+  const hit = cache ? await cache.read(target.uuid, target.updatedAt) : null;
+  if (hit) return { data: hit, cached: true, quota: false };
+
+  const data = await fetchConversation(orgId, target.uuid, hooks?.signal);
+  if (!data || !Array.isArray(data.chat_messages)) {
+    throw new Error('Invalid conversation data structure. Please refresh the page and try again.');
+  }
+
+  const status = cache ? await cache.write(data) : 'unavailable';
+  return { data, cached: false, quota: status === 'quota' };
+}
+
 interface FetchOutcome {
   entries: ExportEntry[];
   failedNames: string[];
+  /** Conversations answered from the cache, so never requested over the network. */
+  cacheHits: number;
+  cacheQuotaExceeded: boolean;
   /**
    * Conversations that contributed at least one file to `entries`. A fetch that
    * succeeded but produced nothing (chats off, no artifacts) is NOT in here:
@@ -183,20 +213,23 @@ async function fetchAll(
   const resolvedNames = new Map<string, string>();
   let firstError: unknown = undefined;
   let completed = 0;
+  let cacheHits = 0;
+  let cacheQuotaExceeded = false;
 
   for (let i = 0; i < total; i += BATCH_SIZE) {
     throwIfAborted(hooks?.signal);
 
     const batch = targets.slice(i, i + BATCH_SIZE);
+    let hitNetwork = false;
+
     await Promise.all(
       batch.map(async (target) => {
         try {
-          const data = await fetchConversation(orgId, target.uuid, hooks?.signal);
-          if (!data || !Array.isArray(data.chat_messages)) {
-            throw new Error(
-              'Invalid conversation data structure. Please refresh the page and try again.'
-            );
-          }
+          const { data, cached, quota } = await loadConversation(orgId, target, hooks);
+          if (cached) cacheHits++;
+          else hitNetwork = true;
+          if (quota) cacheQuotaExceeded = true;
+
           data.model = inferModel(data);
           collected.set(target.uuid, buildEntries(target, data, options, nest));
           resolvedNames.set(target.uuid, data.name || target.name || target.uuid);
@@ -213,9 +246,13 @@ async function fetchAll(
       completed,
       total,
       failed: failedNames.length,
+      fromCache: cacheHits,
     });
 
-    if (i + BATCH_SIZE < total) {
+    // The delay exists to keep claude.ai from rate-limiting us. A batch served
+    // entirely from the cache asked claude.ai for nothing, so pausing after it
+    // would only make a fully-cached re-export slower than it needs to be.
+    if (hitNetwork && i + BATCH_SIZE < total) {
       throwIfAborted(hooks?.signal);
       await delay(INTER_BATCH_DELAY_MS);
     }
@@ -232,7 +269,15 @@ async function fetchAll(
     succeededIds.push(target.uuid);
   }
 
-  return { entries, failedNames, succeededIds, resolvedNames, firstError };
+  return {
+    entries,
+    failedNames,
+    succeededIds,
+    resolvedNames,
+    firstError,
+    cacheHits,
+    cacheQuotaExceeded,
+  };
 }
 
 /**
@@ -252,7 +297,15 @@ async function exportConversations(
   }
 
   const single = targets.length === 1;
-  const { entries, failedNames, succeededIds, resolvedNames, firstError } = await fetchAll(
+  const {
+    entries,
+    failedNames,
+    succeededIds,
+    resolvedNames,
+    firstError,
+    cacheHits,
+    cacheQuotaExceeded,
+  } = await fetchAll(
     orgId,
     targets,
     options,
@@ -276,7 +329,14 @@ async function exportConversations(
     const entry = entries[0]!;
     const filename = entry.path.slice(entry.path.lastIndexOf('/') + 1);
     downloadBlob(new Blob([entry.content], { type: mimeForFilename(filename) }), filename);
-    return { exportedIds: succeededIds, failedNames, artifactCount, filename };
+    return {
+      exportedIds: succeededIds,
+      failedNames,
+      artifactCount,
+      filename,
+      fromCache: cacheHits,
+      cacheQuotaExceeded,
+    };
   }
 
   const zip = new JSZip();
@@ -305,7 +365,14 @@ async function exportConversations(
 
   downloadBlob(blob, filename);
 
-  return { exportedIds: succeededIds, failedNames, artifactCount, filename };
+  return {
+    exportedIds: succeededIds,
+    failedNames,
+    artifactCount,
+    filename,
+    fromCache: cacheHits,
+    cacheQuotaExceeded,
+  };
 }
 
 export { buildEntries, downloadBlob, exportConversations };

@@ -6,6 +6,7 @@
 // Records in features/tracking. It previously carried its own copy of the
 // pipeline and drifted from the browse page's — see CLAUDE.md "Export Flow".
 
+import { remoteCache } from '../../features/cache';
 import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
 import { initErrorCapture } from '../../features/diagnostics';
 import { exportConversations } from '../../features/export';
@@ -72,11 +73,16 @@ function toExportResponse(result: ExportResult, attempted: number): ExportRespon
 async function handleExportConversation(
   request: ExportConversationRequest
 ): Promise<ExportResponse> {
+  // No updatedAt: the popup exports whatever conversation is on screen without
+  // loading the list, so there is nothing to validate a cached copy against and
+  // this always refetches. It still populates the cache for later runs.
   const target: ExportTarget = {
     uuid: request.conversationId,
     name: request.conversationName || request.conversationId,
   };
-  const result = await exportConversations(request.orgId, [target], resolveOptions(request));
+  const result = await exportConversations(request.orgId, [target], resolveOptions(request), {
+    cache: remoteCache,
+  });
   await recordExports(result.exportedIds);
   return toExportResponse(result, 1);
 }
@@ -91,9 +97,12 @@ async function handleExportAllConversations(
   const targets: ExportTarget[] = conversations.map((conv) => ({
     uuid: conv.uuid,
     name: conv.name || conv.uuid,
+    updatedAt: conv.updated_at,
   }));
 
-  const result = await exportConversations(request.orgId, targets, resolveOptions(request));
+  const result = await exportConversations(request.orgId, targets, resolveOptions(request), {
+    cache: remoteCache,
+  });
   await recordExports(result.exportedIds);
   return toExportResponse(result, targets.length);
 }

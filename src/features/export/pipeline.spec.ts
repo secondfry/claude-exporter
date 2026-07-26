@@ -413,3 +413,115 @@ describe('cancellation', () => {
     expect(vi.mocked(fetchConversation).mock.calls.length).toBeLessThanOrEqual(3);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Chat Cache (ADR-0002)
+
+function fakeCache(seed: Conversation[] = []) {
+  const store = new Map(seed.map((conv) => [conv.uuid, conv]));
+  const port = {
+    read: vi.fn(async (uuid: string, updatedAt: string | undefined) => {
+      const found = store.get(uuid);
+      return found && updatedAt === found.updated_at ? found : null;
+    }),
+    write: vi.fn(async (conv: Conversation) => {
+      store.set(conv.uuid, conv);
+      return 'stored' as const;
+    }),
+  };
+  return { port, store };
+}
+
+describe('the Chat Cache', () => {
+  it('serves a conversation whose updated_at still matches, without fetching', async () => {
+    const { port } = fakeCache([conversation('uuid-0', 'Cached chat')]);
+
+    const result = await exportConversations(
+      'org',
+      [{ uuid: 'uuid-0', name: 'Cached chat', updatedAt: '2025-01-02T00:00:00Z' }],
+      options(),
+      { cache: port }
+    );
+
+    expect(fetchConversation).not.toHaveBeenCalled();
+    expect(result.fromCache).toBe(1);
+    expect(await downloads[0]!.blob.text()).toBe('# Cached chat');
+  });
+
+  it('refetches when the conversation has changed since it was stored', async () => {
+    const { port } = fakeCache([conversation('uuid-0', 'Stale copy')]);
+
+    const result = await exportConversations(
+      'org',
+      [{ uuid: 'uuid-0', name: 'Chat', updatedAt: '2025-06-06T00:00:00Z' }],
+      options(),
+      { cache: port }
+    );
+
+    expect(fetchConversation).toHaveBeenCalledTimes(1);
+    expect(result.fromCache).toBe(0);
+  });
+
+  // The popup exports the open conversation without ever loading the list.
+  it('refetches when the caller supplied no updated_at', async () => {
+    const { port } = fakeCache([conversation('uuid-0', 'Cached chat')]);
+
+    await exportConversations('org', targets('First chat'), options(), { cache: port });
+
+    expect(fetchConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores what it fetched, so the next export can skip the network', async () => {
+    const { port, store } = fakeCache();
+
+    await exportConversations('org', targets('First chat'), options(), { cache: port });
+
+    expect(store.get('uuid-0')).toBeDefined();
+    // Stored raw: the model this run inferred is not baked into the record.
+    expect(port.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not touch the network at all when every target is cached', async () => {
+    const { port } = fakeCache([
+      conversation('uuid-0', 'First chat'),
+      conversation('uuid-1', 'Second chat'),
+    ]);
+
+    const result = await exportConversations(
+      'org',
+      [
+        { uuid: 'uuid-0', name: 'First chat', updatedAt: '2025-01-02T00:00:00Z' },
+        { uuid: 'uuid-1', name: 'Second chat', updatedAt: '2025-01-02T00:00:00Z' },
+      ],
+      options(),
+      { cache: port }
+    );
+
+    expect(fetchConversation).not.toHaveBeenCalled();
+    expect(result.fromCache).toBe(2);
+    expect(await zipPaths(downloads[0]!.blob)).toEqual(['First chat.md', 'Second chat.md']);
+  });
+
+  // A full cache is a slower next export, never a failed one.
+  it('still produces the file when the cache is out of space', async () => {
+    const port = {
+      read: vi.fn(async () => null),
+      write: vi.fn(async () => 'quota' as const),
+    };
+
+    const result = await exportConversations('org', targets('First chat'), options(), {
+      cache: port,
+    });
+
+    expect(result.cacheQuotaExceeded).toBe(true);
+    expect(downloads).toHaveLength(1);
+  });
+
+  it('exports normally when no cache is supplied at all', async () => {
+    const result = await exportConversations('org', targets('First chat'), options());
+
+    expect(result.fromCache).toBe(0);
+    expect(result.cacheQuotaExceeded).toBe(false);
+    expect(downloads).toHaveLength(1);
+  });
+});

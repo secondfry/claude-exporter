@@ -20,6 +20,7 @@ import type {
   ConversationSummary,
   ExportFormat,
 } from '../../features/conversation/types';
+import { localCache } from '../../features/cache';
 import { exportConversations } from '../../features/export';
 import type { ExportOptions, ExportProgress, ExportTarget } from '../../features/export';
 import {
@@ -537,7 +538,16 @@ function displayConversations(): void {
   document.querySelectorAll<HTMLButtonElement>('.btn-export').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
-      if (id) void exportSingle({ uuid: id, name: btn.dataset.name || id });
+      if (!id) return;
+      // Take updated_at from the loaded list rather than the button's dataset:
+      // it is what decides whether the Chat Cache may answer instead of the
+      // network, so it must come from the same source the table rendered.
+      const conv = allConversations.find((candidate) => candidate.uuid === id);
+      void exportSingle({
+        uuid: id,
+        name: btn.dataset.name || id,
+        updatedAt: conv?.updated_at,
+      });
     });
   });
 
@@ -760,7 +770,7 @@ async function exportSingle(target: ExportTarget): Promise<void> {
   showToast(`Exporting ${target.name}...`);
 
   try {
-    const result = await exportConversations(orgId, [target], options);
+    const result = await exportConversations(orgId, [target], options, { cache: localCache });
     // exportConversations never writes Export Records — that is the caller's job.
     await recordExports(result.exportedIds);
     showToast(
@@ -800,6 +810,7 @@ async function exportAllFiltered(): Promise<void> {
   const targets: ExportTarget[] = conversationsToExport.map((conv) => ({
     uuid: conv.uuid,
     name: conv.name,
+    updatedAt: conv.updated_at,
   }));
 
   const single = targets.length === 1;
@@ -811,6 +822,9 @@ async function exportAllFiltered(): Promise<void> {
     const result = await exportConversations(orgId, targets, options, {
       onProgress: (progress) => modal.update(progress),
       signal: modal.signal,
+      // The browse page is extension-origin, the same as the background
+      // worker, so it shares that IndexedDB and needs no relay.
+      cache: localCache,
     });
 
     modal.hide();
