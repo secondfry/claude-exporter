@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ConversationSummary } from '$features/conversation/types';
-import type { ExportRecordBook } from '$features/tracking';
+import type { ExportRecordBook, ExportStatus } from '$features/tracking';
 
 import { createConversationList, getProjectName } from './index';
 import type { ConversationList } from './index';
@@ -17,12 +17,16 @@ const conv = (
   };
 };
 
-const staleBook = (staleUuids: readonly string[]): ExportRecordBook => {
-  const set = new Set(staleUuids);
+// Conversations not named default to 'current' (exported, unchanged).
+const bookOf = (statuses: Record<string, ExportStatus>): ExportRecordBook => {
+  const statusOf = (uuid: string): ExportStatus => statuses[uuid] || 'current';
   return {
     size: 0,
-    isStale: (c) => set.has(c.uuid),
-    staleCount: (convs) => convs.filter((c) => set.has(c.uuid)).length,
+    isStale: (c) => statusOf(c.uuid) === 'stale',
+    needsExport: (c) => statusOf(c.uuid) !== 'current',
+    needsExportCount: (convs) =>
+      convs.filter((c) => statusOf(c.uuid) !== 'current').length,
+    status: (c) => statusOf(c.uuid),
   };
 };
 
@@ -90,7 +94,7 @@ describe('createConversationList', () => {
         conv({ name: 'Alpha thing', project_uuid: 'p2', uuid: 'b' }),
       ]);
       list.setProjects({ p1: 'Alpha', p2: 'Beta' });
-      list.setExportRecords(staleBook(['a'])); // would matter for status filters, must not matter here
+      list.setExportRecords(bookOf({ a: 'never' })); // would matter for status filters, must not matter here
       list.setStatusFilter('projects');
       list.setSearch('alpha');
       // Only conv 'a' has project name "Alpha"; conv 'b' has name containing
@@ -98,20 +102,42 @@ describe('createConversationList', () => {
       expect(list.view().map((c) => c.uuid)).toEqual(['a']);
     });
 
-    it('new filter shows only Stale conversations', () => {
+    // 'a' never exported, 'b' exported then edited (Stale), 'c' exported and
+    // unchanged. The three status filters are deliberately NOT a partition:
+    // 'b' belongs to both 'stale' and 'exported'.
+    const threeStates = () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a' }), conv({ uuid: 'b' })]);
-      list.setExportRecords(staleBook(['a']));
-      list.setStatusFilter('new');
+      list.setConversations([
+        conv({ uuid: 'a' }),
+        conv({ uuid: 'b' }),
+        conv({ uuid: 'c' }),
+      ]);
+      list.setExportRecords(bookOf({ a: 'never', b: 'stale' }));
+      return list;
+    };
+
+    it('pending filter shows never-exported and Stale conversations', () => {
+      const list = threeStates();
+      list.setStatusFilter('pending');
+      expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b']);
+    });
+
+    it('never filter shows only conversations with no Export Record', () => {
+      const list = threeStates();
+      list.setStatusFilter('never');
       expect(list.view().map((c) => c.uuid)).toEqual(['a']);
     });
 
-    it('exported filter shows only non-Stale conversations', () => {
-      const list = setup();
-      list.setConversations([conv({ uuid: 'a' }), conv({ uuid: 'b' })]);
-      list.setExportRecords(staleBook(['a']));
-      list.setStatusFilter('exported');
+    it('stale filter shows only conversations edited since their Export Record', () => {
+      const list = threeStates();
+      list.setStatusFilter('stale');
       expect(list.view().map((c) => c.uuid)).toEqual(['b']);
+    });
+
+    it('exported filter includes a Stale conversation — it still has an Export Record', () => {
+      const list = threeStates();
+      list.setStatusFilter('exported');
+      expect(list.view().map((c) => c.uuid)).toEqual(['b', 'c']);
     });
   });
 
@@ -331,12 +357,12 @@ describe('createConversationList', () => {
       expect(list.selectedCount()).toBe(0);
     });
 
-    it('selectStale clears the prior selection and selects only Stale conversations in view', () => {
+    it('selectPending clears the prior selection and selects only conversations needing Export', () => {
       const list = setup();
       list.setConversations(fiveConvs());
-      list.setExportRecords(staleBook(['b', 'd']));
+      list.setExportRecords(bookOf({ b: 'never', d: 'stale' }));
       list.check('a', 0, false);
-      list.selectStale();
+      list.selectPending();
       expect(list.selected()).toEqual(new Set(['b', 'd']));
     });
 
@@ -349,17 +375,17 @@ describe('createConversationList', () => {
     });
   });
 
-  describe('staleCount', () => {
-    it('counts Stale conversations across all(), not just the view', () => {
+  describe('needsExportCount', () => {
+    it('counts conversations needing Export across all(), not just the view', () => {
       const list = setup();
       list.setConversations([
         conv({ uuid: 'a' }),
         conv({ uuid: 'b' }),
         conv({ uuid: 'c' }),
       ]);
-      list.setExportRecords(staleBook(['a', 'c']));
+      list.setExportRecords(bookOf({ a: 'never', c: 'stale' }));
       list.setSearch('nonexistent-match'); // view is now empty
-      expect(list.staleCount()).toBe(2);
+      expect(list.needsExportCount()).toBe(2);
     });
   });
 

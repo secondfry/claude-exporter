@@ -16,7 +16,12 @@ interface SortCriterion {
   field: SortField;
 }
 
-type StatusFilter = 'all' | 'exported' | 'new' | 'projects';
+// 'pending' is the union of 'never' and 'stale' — kept as its own option
+// because it is the one users act on before a bulk Export. 'exported' means
+// "has an Export Record", so a Stale Conversation appears under BOTH it and
+// 'stale'; the three are not a partition and are not meant to be.
+type StatusFilter =
+  'all' | 'exported' | 'never' | 'pending' | 'projects' | 'stale';
 
 /** Default sort, used until the user clicks a column header. */
 const DEFAULT_SORT: SortCriterion = { direction: 'desc', field: 'updated' };
@@ -67,12 +72,13 @@ interface ConversationList {
   checkAll(checked: boolean): void;
   clearSelection(): void;
   display(conv: ConversationSummary): ReturnType<ModelResolver['display']>;
-  isStale(conv: ConversationSummary): boolean;
+  needsExport(conv: ConversationSummary): boolean;
+  needsExportCount(): number;
   projectName(conv: ConversationSummary): string;
   searchPlaceholder(): string;
   selected(): ReadonlySet<string>;
   selectedCount(): number;
-  selectStale(): void;
+  selectPending(): void;
   setConversations(convs: ConversationSummary[]): void;
   setExportRecords(book: ExportRecordBook): void;
   setModels(book: ModelResolver): void;
@@ -80,7 +86,6 @@ interface ConversationList {
   setSearch(query: string): void;
   setStatusFilter(filter: StatusFilter): void;
   sortIndicator(field: SortField): string;
-  staleCount(): number;
   toggleSort(field: SortField): void;
   view(): readonly ConversationSummary[];
 }
@@ -158,10 +163,14 @@ const createConversationList = (): ConversationList => {
         (!!summary && summary.toLowerCase().includes(search));
 
       let matchesStatus = true;
-      if (statusFilter === 'new') {
-        matchesStatus = exportRecords.isStale(conv);
+      if (statusFilter === 'pending') {
+        matchesStatus = exportRecords.needsExport(conv);
+      } else if (statusFilter === 'never') {
+        matchesStatus = exportRecords.status(conv) === 'never';
+      } else if (statusFilter === 'stale') {
+        matchesStatus = exportRecords.status(conv) === 'stale';
       } else if (statusFilter === 'exported') {
-        matchesStatus = !exportRecords.isStale(conv);
+        matchesStatus = exportRecords.status(conv) !== 'never';
       }
 
       return matchesSearch && matchesStatus;
@@ -224,8 +233,11 @@ const createConversationList = (): ConversationList => {
     display(conv) {
       return models.display(conv);
     },
-    isStale(conv) {
-      return exportRecords.isStale(conv);
+    needsExport(conv) {
+      return exportRecords.needsExport(conv);
+    },
+    needsExportCount() {
+      return exportRecords.needsExportCount(allConversations);
     },
     projectName(conv) {
       return getProjectName(conv, projectsMap);
@@ -241,10 +253,10 @@ const createConversationList = (): ConversationList => {
     selectedCount() {
       return selectedUuids.size;
     },
-    selectStale() {
+    selectPending() {
       selectedUuids.clear();
       for (const conv of viewConversations) {
-        if (exportRecords.isStale(conv)) selectedUuids.add(conv.uuid);
+        if (exportRecords.needsExport(conv)) selectedUuids.add(conv.uuid);
       }
     },
     setConversations(convs) {
@@ -285,9 +297,6 @@ const createConversationList = (): ConversationList => {
       const secondaryArrow = direction === 'asc' ? '↓' : '↑';
 
       return ` <span class="sort-indicator">${primaryArrow}<sub>${secondaryArrow}</sub></span>`;
-    },
-    staleCount() {
-      return exportRecords.staleCount(allConversations);
     },
     toggleSort(field) {
       const existingIndex = sortStack.findIndex((s) => s.field === field);

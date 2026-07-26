@@ -113,7 +113,7 @@ const toggleTheme = (): void => {
 
 let orgId: string | null = null;
 // The list is the single source of truth for Conversations, Export Records
-// and models — the render path below reads through it (list.isStale,
+// and models — the render path below reads through it (list.needsExport,
 // list.display) rather than keeping a second, independently-updated copy
 // that sorting/filtering and rendering could silently disagree on.
 const list = createConversationList();
@@ -123,7 +123,11 @@ let modelDisplay: 'current' | 'original' = 'original';
 
 /** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
 const asStatusFilter = (value: string | undefined): StatusFilter => {
-  return value === 'new' || value === 'exported' || value === 'projects'
+  return value === 'pending' ||
+    value === 'never' ||
+    value === 'stale' ||
+    value === 'exported' ||
+    value === 'projects'
     ? value
     : 'all';
 };
@@ -383,7 +387,7 @@ const displayConversations = (): void => {
     const modelBadgeClass = getModelBadgeClass(modelInfo.model);
     const projectName = list.projectName(conv);
 
-    const newUpdated = list.isStale(conv);
+    const newUpdated = list.needsExport(conv);
     html += `
       <tr data-id="${escapeHtml(conv.uuid)}">
         <td>
@@ -530,13 +534,13 @@ const updateExportButtonText = (): void => {
 const updateStats = (): void => {
   const stats = el('stats');
   if (!stats) return;
-  stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.staleCount()} new/updated)`;
+  stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.needsExportCount()} new/updated)`;
 };
 
 const autoSelectNewUpdated = (): void => {
   // Only the Selection changes here, not the View — same in-place treatment
   // as handleCheckboxChange/handleSelectAll.
-  list.selectStale();
+  list.selectPending();
   syncSelectionDom();
   updateExportButtonText();
 };

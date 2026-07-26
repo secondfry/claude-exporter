@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.21.0]
+
+**"Previously exported" hid conversations that had been exported.** The browse filter asked one boolean, `isStale()`, which returned true both for a Conversation with no Export Record and for one whose content changed after its record was written. So a chat you exported and then continued fell out of "Previously exported" entirely — even though it plainly has an Export Record.
+
+CONTEXT.md already said which reading is right: **Stale** is "the state of a Conversation whose content has changed since its Export Record was written", which presupposes a record exists. A never-exported Conversation is not Stale; it simply has no record. The code contradicted its own glossary.
+
+`ExportRecordBook` now answers `status()` with `never | stale | current`, and `isStale()` means strictly Stale. The green dot, the auto-selection on load and the header count all move to `needsExport()` (`never` or `stale`) and behave exactly as before. The filter gains two entries: **Never exported** and **Updated since export**. **Previously exported** now means "has an Export Record", so a Stale chat appears under both it and Updated — the status filters are deliberately not a partition.
+
 ## [1.20.1]
 
 **The Chat Cache is confirmed working in production.** The signed v1.20.0 build has been running in release Firefox against a real account: 1,111 conversations cached, 62 MB on disk, with the count and Clear Cache both live in Options. Until now every claim about the cache rested on unit tests and a build-output audit — nothing had been loaded into a browser since the v1.11.0 restructure. TODO's critical smoke-test item is narrowed rather than closed: Chrome has still never been loaded, and the export, cancel, backup and permission-revoke checks remain unverified in either browser.

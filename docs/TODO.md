@@ -7,8 +7,11 @@
 - **Manual smoke test in both browsers** — partially done. As of v1.20.0 the signed
   build runs in production Firefox and the Chat Cache is confirmed working there
   (1,111 conversations, 62 MB, count and Clear Cache surfaced in Options). Chrome has
-  still never been loaded, and the rest of the checklist below is unverified in either
-  browser. Load `dist/chrome/` unpacked, then check: popup Export Current + Export All,
+  still never been loaded. In Firefox, verified: popup Export Current and Export All
+  (cache included), browse load / select / Export Selected, the status filters,
+  Options save, Test Connection and Backup export. Not yet checked anywhere: cancel
+  mid-export, Backup re-import, and the Firefox permission prompt after revoking host
+  access. Load `dist/chrome/` unpacked, then check: popup Export Current + Export All,
   browse page load / filter / select / Export Selected, cancel mid-export, options
   save + Test Connection, backup export and re-import, and Firefox's permission
   prompt after revoking host access in `about:addons`.

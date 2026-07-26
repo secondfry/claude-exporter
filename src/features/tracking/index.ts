@@ -33,10 +33,23 @@ interface ModelSnapshots {
   [conversationUuid: string]: ModelSnapshot;
 }
 
+/**
+ * Where a Conversation sits relative to its Export Record.
+ * - `never`   — no Export Record at all. Per CONTEXT.md this is NOT Stale:
+ *               Stale presupposes a record for the content to be newer than.
+ * - `stale`   — has an Export Record, and `updated_at` is later than it.
+ * - `current` — has an Export Record no older than `updated_at`.
+ */
+type ExportStatus = 'current' | 'never' | 'stale';
+
 interface ExportRecordBook {
+  /** Strictly Stale per CONTEXT.md — excludes never-exported. */
   isStale(conv: ConversationSummary): boolean;
+  /** `never` or `stale`: what the green dot, auto-select and header count mean. */
+  needsExport(conv: ConversationSummary): boolean;
+  needsExportCount(convs: readonly ConversationSummary[]): number;
   readonly size: number;
-  staleCount(convs: readonly ConversationSummary[]): number;
+  status(conv: ConversationSummary): ExportStatus;
 }
 
 interface DisplayModel {
@@ -79,19 +92,20 @@ const readModelSnapshots = async (): Promise<ModelSnapshots> => {
   return result.modelSnapshots || {};
 };
 
-// A conversation is stale (new/updated since last export) when it has never
-// been exported, or its `updated_at` is later than its Export Record.
-// Preserves the exact comparison semantics of the original
+// Never-exported and Stale are different states, and collapsing them was a
+// real bug: the browse filter's "Previously exported" hid a Conversation that
+// HAD been exported and then edited, because both answered the same boolean.
+// The comparison itself is unchanged from the original
 // browse/index.js#isNewOrUpdated (line 149-153): a Date comparison, not a
 // string comparison, and strictly-later (`>`), so an export recorded at the
-// exact same instant as `updated_at` does NOT count as stale.
-const isStale = (
+// exact same instant as `updated_at` does NOT count as Stale.
+const statusOf = (
   conv: ConversationSummary,
   records: ExportRecords,
-): boolean => {
+): ExportStatus => {
   const lastExport = records[conv.uuid];
-  if (!lastExport) return true; // Never exported
-  return new Date(conv.updated_at) > new Date(lastExport);
+  if (!lastExport) return 'never';
+  return new Date(conv.updated_at) > new Date(lastExport) ? 'stale' : 'current';
 };
 
 // Resolve which model to show for a conversation. Honors the `preference`
@@ -119,17 +133,23 @@ const getDisplayModel = (
 const makeExportRecordBook = (records: ExportRecords): ExportRecordBook => {
   return {
     isStale(conv) {
-      return isStale(conv, records);
+      return statusOf(conv, records) === 'stale';
+    },
+    needsExport(conv) {
+      return statusOf(conv, records) !== 'current';
+    },
+    needsExportCount(convs) {
+      let count = 0;
+      for (const conv of convs) {
+        if (statusOf(conv, records) !== 'current') count += 1;
+      }
+      return count;
     },
     get size() {
       return Object.keys(records).length;
     },
-    staleCount(convs) {
-      let count = 0;
-      for (const conv of convs) {
-        if (isStale(conv, records)) count += 1;
-      }
-      return count;
+    status(conv) {
+      return statusOf(conv, records);
     },
   };
 };
@@ -269,6 +289,7 @@ export {
 export type {
   DisplayModel,
   ExportRecordBook,
+  ExportStatus,
   ModelDisplayBook,
   ModelPreference,
 };

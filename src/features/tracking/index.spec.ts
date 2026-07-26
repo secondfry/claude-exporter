@@ -45,23 +45,32 @@ describe('tracking', () => {
       // only holds if the book actually read the stored timestamp for c1.
       expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(false);
       expect(book.isStale(conv('c1', '2026-01-01T00:00:00.001Z'))).toBe(true);
-      expect(book.isStale(conv('missing', '2026-01-01T00:00:00.000Z'))).toBe(
-        true,
+      // Never exported is 'never', NOT Stale — Stale needs a record to be
+      // newer than. It still needs Exporting.
+      expect(book.status(conv('missing', '2026-01-01T00:00:00.000Z'))).toBe(
+        'never',
       );
+      expect(
+        book.needsExport(conv('missing', '2026-01-01T00:00:00.000Z')),
+      ).toBe(true);
     });
 
     it('defaults to an empty book when nothing is stored', async () => {
       const book = await loadExportRecords();
       expect(book.size).toBe(0);
-      expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(true);
+      expect(book.status(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe('never');
     });
   });
 
   describe('emptyExportRecords', () => {
-    it('returns a book with size 0 and everything stale', () => {
+    it('returns a book with size 0 in which nothing has ever been exported', () => {
       const book = emptyExportRecords();
       expect(book.size).toBe(0);
-      expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(true);
+      expect(book.status(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe('never');
+      expect(book.isStale(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(false);
+      expect(book.needsExport(conv('c1', '2026-01-01T00:00:00.000Z'))).toBe(
+        true,
+      );
     });
   });
 
@@ -285,10 +294,44 @@ describe('tracking', () => {
     });
   });
 
+  describe('ExportRecordBook#status', () => {
+    // The distinction the browse "Previously exported" filter got wrong: a
+    // Conversation edited after its Export Record still HAS one.
+    it('separates never-exported from Stale', async () => {
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' },
+      });
+      const book = await loadExportRecords();
+      expect(book.status(conv('c1', '2026-01-03T00:00:00.000Z'))).toBe('stale');
+      expect(book.status(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe(
+        'current',
+      );
+      expect(book.status(conv('nope', '2026-01-03T00:00:00.000Z'))).toBe(
+        'never',
+      );
+    });
+
+    it('needsExport covers never and stale but not current', async () => {
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-02T00:00:00.000Z' },
+      });
+      const book = await loadExportRecords();
+      expect(book.needsExport(conv('c1', '2026-01-03T00:00:00.000Z'))).toBe(
+        true,
+      );
+      expect(book.needsExport(conv('nope', '2026-01-03T00:00:00.000Z'))).toBe(
+        true,
+      );
+      expect(book.needsExport(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe(
+        false,
+      );
+    });
+  });
+
   describe('ExportRecordBook#isStale', () => {
-    it('is stale when the conversation has never been exported', () => {
+    it('is NOT stale when the conversation has never been exported', () => {
       const book = emptyExportRecords();
-      expect(book.isStale(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe(true);
+      expect(book.isStale(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe(false);
     });
 
     it('is stale when updated_at is strictly later than the export record', async () => {
@@ -316,11 +359,11 @@ describe('tracking', () => {
     });
   });
 
-  describe('ExportRecordBook#staleCount', () => {
-    it('counts stale conversations over a mixed list including one with no Export Record', async () => {
+  describe('ExportRecordBook#needsExportCount', () => {
+    it('counts never-exported and Stale conversations over a mixed list', async () => {
       await storageSet('local', {
         exportTimestamps: {
-          c1: '2026-01-02T00:00:00.000Z', // not stale: updated_at equal
+          c1: '2026-01-02T00:00:00.000Z', // current: updated_at equal
           c2: '2026-01-01T00:00:00.000Z', // stale: updated_at later
         },
       });
@@ -329,10 +372,10 @@ describe('tracking', () => {
       const convs = [
         conv('c1', '2026-01-02T00:00:00.000Z'),
         conv('c2', '2026-01-03T00:00:00.000Z'),
-        conv('c3', '2026-01-01T00:00:00.000Z'), // stale: never exported
+        conv('c3', '2026-01-01T00:00:00.000Z'), // never exported
       ];
 
-      expect(book.staleCount(convs)).toBe(2);
+      expect(book.needsExportCount(convs)).toBe(2);
     });
   });
 
