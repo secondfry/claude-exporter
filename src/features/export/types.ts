@@ -6,7 +6,10 @@
 // recordExports themselves.
 
 import type { CachePort } from '../cache/messages';
-import type { ArtifactFormat, ExportFormat } from '../conversation/types';
+import type { ArtifactFormat } from '../artifacts';
+
+/** Output format for an exported conversation. */
+type ExportFormat = 'markdown' | 'text' | 'json';
 
 interface ExportOptions {
   format: ExportFormat;
@@ -81,6 +84,7 @@ interface ExportEntry {
 }
 
 export type {
+  ArtifactFormat,
   CachePort,
   ExportEntry,
   ExportFormat,

@@ -62,25 +62,11 @@ interface ConversationSummary {
   [key: string]: unknown;
 }
 
-/** Output format for an exported conversation. */
-type ExportFormat = 'markdown' | 'text' | 'json';
-
-/** How artifacts are written out: as-authored, or converted to another form. */
-type ArtifactFormat = 'original' | string;
-
-interface ArtifactFile {
-  filename: string;
-  content: string;
-}
-
 export type {
   Attachment,
-  ArtifactFile,
-  ArtifactFormat,
   ChatMessage,
   ContentBlock,
   Conversation,
   ConversationSummary,
-  ExportFormat,
   MessageSender,
 };

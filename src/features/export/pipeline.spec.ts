@@ -1,7 +1,8 @@
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ArtifactFile, Conversation } from '../conversation/types';
+import type { ArtifactFile } from '../artifacts';
+import type { Conversation } from '../conversation/types';
 import { exportConversations } from './pipeline';
 import type { ExportOptions, ExportTarget } from './types';
 

@@ -2,7 +2,16 @@
 
 import { getCurrentBranch } from '../conversation';
 
-import type { ArtifactFile, ArtifactFormat, ChatMessage, Conversation } from '../conversation/types';
+import type { ChatMessage, Conversation } from '../conversation/types';
+
+/** How artifacts are written out: as-authored, or converted to another form. */
+type ArtifactFormat = 'original' | string;
+
+/** An extracted artifact, ready to be written to disk under `filename`. */
+interface ArtifactFile {
+  filename: string;
+  content: string;
+}
 
 interface Artifact {
   title: string;
@@ -407,3 +416,4 @@ export {
   getFileExtension,
   isProgrammingLanguage,
 };
+export type { ArtifactFile, ArtifactFormat };

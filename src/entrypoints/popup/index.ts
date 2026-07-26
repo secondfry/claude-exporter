@@ -8,7 +8,7 @@ import type {
   ExportResponse as ContentExportResponse,
   FailureResponse,
 } from '../content/messages';
-import type { ArtifactFormat, ExportFormat } from '../../features/conversation/types';
+import type { ArtifactFormat, ExportFormat } from '../../features/export/types';
 import {
   queryTabs,
   sendMessageToTab,
