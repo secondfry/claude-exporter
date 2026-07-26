@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.21.2]
+
+**The smoke-test item now records what was actually run.** It has sat at the top of TODO as an undifferentiated block since v1.12.0, which made it impossible to tell how much of it was still outstanding — and it kept restating checks that had already passed. Split into a verified list and a remaining one, with Chrome called out as never having been loaded at all. The status-filter check is marked for re-running: it passed against the pre-v1.21.0 filter, which no longer exists.
+
 ## [1.21.1]
 
 **README rewritten; INSTALL.md's "Browser Differences" was still describing a Firefox build that stopped existing in v1.11.0.** It claimed Manifest V2, `browser_action` and `tabs.executeScript()` — all three gone with the MV3 migration in ADR-0001 — and the "Using Both Browsers" section still told readers to load `chrome/` and `firefox/` folders that were deleted in the same release. Replaced with what actually differs now: one background key in the manifest, and Firefox's optional host permissions.

@@ -4,25 +4,42 @@
 
 ### Critical Priority 🔴
 
-- **Manual smoke test in both browsers** — partially done. As of v1.20.0 the signed
-  build runs in production Firefox and the Chat Cache is confirmed working there
-  (1,111 conversations, 62 MB, count and Clear Cache surfaced in Options). Chrome has
-  still never been loaded. In Firefox, verified: popup Export Current and Export All
-  (cache included), browse load / select / Export Selected, the status filters,
-  Options save, Test Connection and Backup export. Not yet checked anywhere: cancel
-  mid-export, Backup re-import, and the Firefox permission prompt after revoking host
-  access. Load `dist/chrome/` unpacked, then check: popup Export Current + Export All,
-  browse page load / filter / select / Export Selected, cancel mid-export, options
-  save + Test Connection, backup export and re-import, and Firefox's permission
-  prompt after revoking host access in `about:addons`.
+- **Manual smoke test — Firefox mostly done, Chrome not started.** The signed
+  v1.20.0 build has been running in production Firefox against a live account
+  (1,111 conversations, 62 MB cached). It found one real bug, fixed in v1.21.0:
+  "Previously exported" excluded conversations that had been exported and then
+  edited.
 
-  Cache-specific: export a set of chats twice and confirm the second run reports
-  "(N from cache)" and finishes without network requests (DevTools Network on the
-  browse page); continue one chat on claude.ai and confirm only that one refetches;
-  Clear Cache in Options drops the count to 0; and the popup's Export All shares the
-  same cache as the browse page rather than building its own (Application →
-  IndexedDB should show `claude-exporter-chat-cache` only under the extension
-  origin, never under claude.ai).
+  Verified in Firefox:
+
+  - [x] popup Export Current
+  - [x] popup Export All, including Cache Hits
+  - [x] browse page load, Selection, Export Selected
+  - [x] status filters (pre-v1.21.0 shape — **re-check**, the options changed)
+  - [x] Options save, Test Connection
+  - [x] Backup export
+  - [x] Chat Cache count and Clear Cache button render in Options
+
+  Still unverified **in either browser**:
+
+  - [ ] cancel mid-export
+  - [ ] Backup re-import
+  - [ ] the new status filters: Never exported / Updated since export /
+        Previously exported, with a chat that is exported-then-edited appearing
+        under both of the last two
+  - [ ] continue one chat on claude.ai, re-export the set, confirm only that one
+        refetches — this is the check that would catch a loosened `updated_at`
+        comparison, which fails by silently exporting a Conversation missing its
+        newest messages
+  - [ ] Clear Cache drops the count to 0
+  - [ ] Application → IndexedDB shows `claude-exporter-chat-cache` only under the
+        extension origin, never under claude.ai (ADR-0003)
+  - [ ] Firefox re-prompts after revoking host access in `about:addons`
+
+  **Chrome has never been loaded at all.** Load `dist/chrome/` unpacked and run
+  the whole list above. The JS is identical to Firefox's, so the interesting
+  differences are the MV3 service worker going idle between messages, and host
+  permissions being granted at install rather than optional.
 
 - **Orphans** — conversations in the cache that no longer exist upstream, for which
   the cache is the only remaining copy (ADR-0002 consequence). Nothing surfaces them
