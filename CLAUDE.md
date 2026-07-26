@@ -54,8 +54,9 @@ into `dist/chrome/` and `dist/firefox/`. The repo root _is_ the extension projec
   `src/manifest.config.ts` is the sole exception: `vite.config.ts` loads it through
   Vite's esbuild config loader, which resolves no aliases.
 - **Use arrow functions**, not `function` declarations or expressions. Method
-  shorthands and generators are exempt. ~192 pre-existing violations remain; see
-  docs/TODO.md.
+  shorthands, accessors and generators are exempt. The rule has no fixer and
+  converting changes hoisting to TDZ — check nothing calls the function during
+  module evaluation before its definition line.
 
 ## Domain language
 

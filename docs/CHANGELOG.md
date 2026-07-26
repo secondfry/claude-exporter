@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.19.2]
+
+**Docs caught up with the two commits before them.** CLAUDE.md still quoted a backlog of ~192 arrow-function violations against a tree that has none, and TODO.md still described `eslint-plugin-tsconfig-paths` as registered. Both read as live work. The TODO entry survives, restated as the gap the removal leaves: `no-restricted-imports` bans parent-relative paths, but nothing checks that an import which *could* use an alias does.
+
+Also ignores `.claude/`, which holds session state and git worktrees — committing those adds embedded-repo gitlinks that no clone can resolve.
+
 ## [1.19.1]
 
 **Dropped `eslint-plugin-tsconfig-paths`.** Its rule had been registered but `off` since the tooling landed, and keeping it wired cost an ESLint-8 compatibility shim, an ambient type declaration and a dependency, all to serve a rule that never ran. Three things were wrong with it here: it calls `context.getFilename()`/`getSourceCode()`, removed in ESLint 10; it feeds `path.normalize`d patterns to picomatch v2, which reads the resulting `\` as an escape character, so on Windows no alias ever matches and every relative import is reported as having no candidates; and it rewrites sibling imports too, which this project keeps relative on purpose.

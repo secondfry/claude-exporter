@@ -42,13 +42,14 @@
   (22), `entrypoints/options/index.ts` (12), `features/models/index.spec.ts`
   (12), `entrypoints/browse/index.ts` (8).
 
-- **`eslint-plugin-tsconfig-paths` is registered but its rule is off** — it cannot
-  be adopted as written. It rewrites _every_ relative import including siblings,
-  which this project keeps relative on purpose, and on Windows it feeds
-  `path.normalize`d patterns to picomatch v2, which reads the resulting `\` as an
-  escape character so no alias ever matches. It also still calls
-  `context.getFilename()`, removed in ESLint 10; `eslint.config.ts` proxies that
-  back. Fixing the plugin upstream would let all three workarounds go.
+- **Nothing enforces the alias rule** — `no-restricted-imports` bans `../*`, but
+  nothing checks that a path which _could_ be an alias actually is one.
+  `eslint-plugin-tsconfig-paths` was meant to (removed in v1.19.1): it rewrites
+  _every_ relative import including siblings, which this project keeps relative on
+  purpose, on Windows it feeds `path.normalize`d patterns to picomatch v2 which
+  reads the resulting `\` as an escape character so no alias ever matches, and it
+  still calls `context.getFilename()`, removed in ESLint 10. Fixing those upstream
+  would let it come back.
 
 - **`CachePort` is declared by the provider, not the consumer** — `features/export/types.ts`
   imports `CachePort` from `features/cache/messages.ts`, but the port describes what an

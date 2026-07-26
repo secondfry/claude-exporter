@@ -2,3 +2,6 @@ node_modules/
 package-lock.json
 dist/
 releases/
+
+# Claude Code session state and its git worktrees
+.claude/
