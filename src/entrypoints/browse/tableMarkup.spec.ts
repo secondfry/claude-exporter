@@ -186,4 +186,47 @@ describe('browse/tableMarkup', () => {
       }
     });
   });
+
+  // An Orphan is a row whose claude.ai page no longer exists. Everything about
+  // it stays usable — it is selectable and exportable, because the cached copy
+  // is the only one left — except the one control that would 404.
+  describe('an Orphan row', () => {
+    const orphanMarkup = (): string => {
+      const list = listWith([conv('gone', 'Deleted chat'), conv('b', 'B')]);
+      list.setOrphans(new Set(['gone']));
+      return renderTable(buildTableModel(list, PREFS));
+    };
+
+    it('does not link the name to a page that is gone', () => {
+      expect(orphanMarkup()).not.toContain('https://claude.ai/chat/gone');
+    });
+
+    it('still links rows that are not Orphans', () => {
+      expect(orphanMarkup()).toContain('https://claude.ai/chat/b');
+    });
+
+    it('badges the row so the missing link is explained', () => {
+      expect(orphanMarkup()).toContain('orphan-badge');
+    });
+
+    it('keeps the Export button, which is the whole point of showing it', () => {
+      expect(orphanMarkup()).toContain(
+        '<button class="btn-small btn-export" data-id="gone"',
+      );
+    });
+
+    it('keeps the checkbox, so an Orphan can join a bulk Export', () => {
+      expect(orphanMarkup()).toContain(
+        'class="conversation-checkbox" data-id="gone"',
+      );
+    });
+
+    it('escapes an Orphan name, which no longer goes through the link path', () => {
+      const list = listWith([conv('gone', '<script>alert(1)</script>')]);
+      list.setOrphans(new Set(['gone']));
+      const html = renderTable(buildTableModel(list, PREFS));
+      expect(html).not.toContain('<script>');
+      expect(html).toContain('&lt;script&gt;');
+    });
+  });
 });

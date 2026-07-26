@@ -12,6 +12,7 @@ const asStatusFilter = (value: string | undefined): StatusFilter => {
     value === 'never' ||
     value === 'stale' ||
     value === 'exported' ||
+    value === 'orphans' ||
     value === 'projects'
     ? value
     : 'all';

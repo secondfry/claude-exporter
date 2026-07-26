@@ -18,11 +18,13 @@ import {
   showImportModeModal,
 } from '$features/backup';
 import { localCache } from '$features/cache';
+import { findOrphansSafely } from '$features/cache/orphans';
 import { createConversationList } from '$features/conversation-list';
 import {
   fetchConversationList,
   fetchProjects,
 } from '$features/conversation/api';
+import type { ConversationSummary } from '$features/conversation/types';
 import { initErrorCapture } from '$features/diagnostics';
 import { exportConversations } from '$features/export/pipeline';
 import type {
@@ -281,6 +283,29 @@ const recordModelsFor = async (
   await refreshModels();
 };
 
+/**
+ * Fold the Chat Cache's Orphans into the table, after it has already been
+ * painted from the live list.
+ *
+ * Second phase rather than part of the first because an Orphan lookup reads
+ * IndexedDB, and the table has no reason to wait on it: the live Conversations
+ * are the answer to what the user asked for, and Orphans are the extra. It is
+ * also the reason this cannot throw — see findOrphansSafely.
+ */
+const addOrphans = async (
+  live: readonly ConversationSummary[],
+): Promise<void> => {
+  const orphans = await findOrphansSafely(live);
+  if (orphans.length === 0) return;
+
+  list.setConversations([
+    ...live,
+    ...orphans.map((conv) => ({ ...conv, model: inferModel(conv) })),
+  ]);
+  list.setOrphans(new Set(orphans.map((conv) => conv.uuid)));
+  displayConversations();
+};
+
 const loadConversations = async (): Promise<void> => {
   if (!orgId) return;
 
@@ -290,10 +315,13 @@ const loadConversations = async (): Promise<void> => {
     const conversations = await fetchConversationList(orgId);
     await recordModelsFor(conversations);
 
-    list.setConversations(
-      conversations.map((conv) => ({ ...conv, model: inferModel(conv) })),
-    );
+    const live = conversations.map((conv) => ({
+      ...conv,
+      model: inferModel(conv),
+    }));
+    list.setConversations(live);
     displayConversations();
+    await addOrphans(live);
   } catch (error) {
     console.error(new Error('Loading conversations failed', { cause: error }));
     showError(`Failed to load conversations: ${errorMessage(error)}`);

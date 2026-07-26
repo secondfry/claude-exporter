@@ -28,6 +28,7 @@ interface DisplayedModel {
 interface TableSource {
   allViewSelected(): boolean;
   display(conv: ConversationSummary): DisplayedModel;
+  isOrphan(conv: ConversationSummary): boolean;
   needsExport(conv: ConversationSummary): boolean;
   projectName(conv: ConversationSummary): string;
   selected(): ReadonlySet<string>;
@@ -38,6 +39,7 @@ interface TableSource {
 interface RowModel {
   created: { date: string; time: string };
   index: number;
+  isOrphan: boolean;
   model: DisplayedModel;
   name: string;
   needsExport: boolean;
@@ -95,6 +97,7 @@ const buildTableModel = (
     rows: list.view().map((conv, index) => ({
       created: stamp(conv.created_at, prefs),
       index,
+      isOrphan: list.isOrphan(conv),
       model: list.display(conv),
       name: conv.name,
       needsExport: list.needsExport(conv),
@@ -129,6 +132,22 @@ const renderStamp = (value: { date: string; time: string }): string => {
   return `${escapeHtml(value.date)}<br><span class="time">${escapeHtml(value.time)}</span>`;
 };
 
+/**
+ * An Orphan's claude.ai page is gone — that is what makes it an Orphan — so
+ * linking to it offers the user a guaranteed 404 on the one row where the
+ * extension holds the only surviving copy. The badge says why the link is
+ * missing, which a bare unlinked name would not.
+ */
+const renderName = (row: RowModel): string => {
+  const name = escapeHtml(row.name);
+  if (row.isOrphan) {
+    return `<span class="orphan-name" title="${name}">${name}</span><span class="orphan-badge" title="Deleted from claude.ai — this cached copy is the only one left">orphan</span>`;
+  }
+  return `<a href="https://claude.ai/chat/${escapeHtml(row.uuid)}" target="_blank" title="${name}">
+              ${name}
+            </a>`;
+};
+
 const renderRow = (row: RowModel): string => {
   const uuid = escapeHtml(row.uuid);
   const name = escapeHtml(row.name);
@@ -140,9 +159,7 @@ const renderRow = (row: RowModel): string => {
         <td>
           <div class="conversation-name">
             ${dot}
-            <a href="https://claude.ai/chat/${uuid}" target="_blank" title="${name}">
-              ${name}
-            </a>
+            ${renderName(row)}
           </div>
         </td>
         <td>${escapeHtml(row.projectName)}</td>

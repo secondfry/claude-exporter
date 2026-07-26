@@ -8,12 +8,16 @@ import { asSortField, asStatusFilter } from './viewControls';
 
 describe('browse/viewControls', () => {
   describe('asStatusFilter', () => {
-    it.each(['pending', 'never', 'stale', 'exported', 'projects'] as const)(
-      'passes %s through',
-      (value) => {
-        expect(asStatusFilter(value)).toBe(value);
-      },
-    );
+    it.each([
+      'pending',
+      'never',
+      'stale',
+      'exported',
+      'orphans',
+      'projects',
+    ] as const)('passes %s through', (value) => {
+      expect(asStatusFilter(value)).toBe(value);
+    });
 
     it('passes "all" through', () => {
       expect(asStatusFilter('all')).toBe('all');
@@ -21,7 +25,7 @@ describe('browse/viewControls', () => {
 
     // An unknown attribute must widen the View, never narrow it to nothing.
     it('falls back to "all" for an unrecognised value', () => {
-      expect(asStatusFilter('orphans')).toBe('all');
+      expect(asStatusFilter('archived')).toBe('all');
     });
 
     it('falls back to "all" when the attribute is absent', () => {

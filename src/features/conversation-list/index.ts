@@ -20,8 +20,12 @@ interface SortCriterion {
 // because it is the one users act on before a bulk Export. 'exported' means
 // "has an Export Record", so a Stale Conversation appears under BOTH it and
 // 'stale'; the three are not a partition and are not meant to be.
+// 'orphans' is not a status in the same sense as the rest: it says where the
+// Conversation still exists rather than whether it has been Exported. It lives
+// in the same union because it occupies the same control — a user asking "what
+// do I still need to deal with?" reaches for one dropdown, not two.
 type StatusFilter =
-  'all' | 'exported' | 'never' | 'pending' | 'projects' | 'stale';
+  'all' | 'exported' | 'never' | 'orphans' | 'pending' | 'projects' | 'stale';
 
 /** Default sort, used until the user clicks a column header. */
 const DEFAULT_SORT: SortCriterion = { direction: 'desc', field: 'updated' };
@@ -72,8 +76,10 @@ interface ConversationList {
   checkAll(checked: boolean): void;
   clearSelection(): void;
   display(conv: ConversationSummary): ReturnType<ModelResolver['display']>;
+  isOrphan(conv: ConversationSummary): boolean;
   needsExport(conv: ConversationSummary): boolean;
   needsExportCount(): number;
+  orphanCount(): number;
   projectName(conv: ConversationSummary): string;
   searchPlaceholder(): string;
   selected(): ReadonlySet<string>;
@@ -82,6 +88,7 @@ interface ConversationList {
   setConversations(convs: ConversationSummary[]): void;
   setExportRecords(book: ExportRecordBook): void;
   setModels(book: ModelResolver): void;
+  setOrphans(uuids: ReadonlySet<string>): void;
   setProjects(projectsMap: Record<string, string>): void;
   setSearch(query: string): void;
   setStatusFilter(filter: StatusFilter): void;
@@ -96,6 +103,11 @@ const createConversationList = (): ConversationList => {
   let projectsMap: Record<string, string> = {};
   let exportRecords: ExportRecordBook = emptyExportRecords();
   let models: ModelResolver = emptyModelResolver();
+  // Which of allConversations exist only in the Chat Cache. Held as a set of
+  // uuids rather than a flag on the rows because an Orphan is a fact about the
+  // *cache*, discovered separately and later than the row itself, and marking
+  // up the ConversationSummary would put it in everything that round-trips one.
+  let orphanUuids: ReadonlySet<string> = new Set();
   // Lower-cased once at setSearch time rather than per row per keystroke.
   // Like statusFilter and sortStack this is view-model state, not an
   // accumulator: it lives exactly as long as the list instance does.
@@ -194,6 +206,8 @@ const createConversationList = (): ConversationList => {
         return exportRecords.status(conv) !== 'never';
       case 'never':
         return exportRecords.status(conv) === 'never';
+      case 'orphans':
+        return orphanUuids.has(conv.uuid);
       case 'pending':
         return exportRecords.needsExport(conv);
       case 'stale':
@@ -275,11 +289,17 @@ const createConversationList = (): ConversationList => {
     display(conv) {
       return models.display(conv);
     },
+    isOrphan(conv) {
+      return orphanUuids.has(conv.uuid);
+    },
     needsExport(conv) {
       return exportRecords.needsExport(conv);
     },
     needsExportCount() {
       return exportRecords.needsExportCount(allConversations);
+    },
+    orphanCount() {
+      return orphanUuids.size;
     },
     projectName(conv) {
       return getProjectName(conv, projectsMap);
@@ -314,6 +334,12 @@ const createConversationList = (): ConversationList => {
     },
     setModels(book) {
       models = book;
+      recompute();
+    },
+    setOrphans(uuids) {
+      // Recomputes, unlike setExportRecords: this one *can* change which rows
+      // belong in the View, because 'orphans' is a filter over exactly it.
+      orphanUuids = uuids;
       recompute();
     },
     setProjects(map) {

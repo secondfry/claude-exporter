@@ -571,6 +571,75 @@ describe('createConversationList', () => {
     });
   });
 
+  // Orphans (CONTEXT.md): Conversations that exist only in the Chat Cache.
+  // They are ordinary rows in every respect the list cares about — the filter
+  // is what makes them findable, since a user who deleted a chat by accident
+  // has no other way to ask "what do I still have?"
+  describe('orphans', () => {
+    const withOrphans = (): ConversationList => {
+      const list = createConversationList();
+      list.setConversations([
+        conv({ name: 'Live', uuid: 'a' }),
+        conv({ name: 'Deleted', uuid: 'b' }),
+      ]);
+      list.setOrphans(new Set(['b']));
+      return list;
+    };
+
+    it('shows only Orphans under the orphans filter', () => {
+      const list = withOrphans();
+      list.setStatusFilter('orphans');
+      expect(list.view().map((c) => c.uuid)).toEqual(['b']);
+    });
+
+    // They are not a separate table. A user who never opens the filter should
+    // still see the Conversation they lost.
+    it('leaves Orphans in the View under "all"', () => {
+      expect(
+        withOrphans()
+          .view()
+          .map((c) => c.uuid)
+          .sort(),
+      ).toEqual(['a', 'b']);
+    });
+
+    it('answers isOrphan per row', () => {
+      const list = withOrphans();
+      expect(list.isOrphan(conv({ uuid: 'b' }))).toBe(true);
+      expect(list.isOrphan(conv({ uuid: 'a' }))).toBe(false);
+    });
+
+    it('counts them', () => {
+      expect(withOrphans().orphanCount()).toBe(1);
+    });
+
+    it('reports no Orphans before the cache has been consulted', () => {
+      const list = createConversationList();
+      list.setConversations([conv({ uuid: 'a' })]);
+      expect(list.orphanCount()).toBe(0);
+      expect(list.isOrphan(conv({ uuid: 'a' }))).toBe(false);
+    });
+
+    // Unlike setExportRecords, this one must recompute: it changes which rows
+    // belong in the View whenever the orphans filter is the active one.
+    it('recomputes the View when Orphans arrive after the filter is set', () => {
+      const list = createConversationList();
+      list.setConversations([conv({ uuid: 'a' }), conv({ uuid: 'b' })]);
+      list.setStatusFilter('orphans');
+      expect(list.view()).toEqual([]);
+
+      list.setOrphans(new Set(['b']));
+      expect(list.view().map((c) => c.uuid)).toEqual(['b']);
+    });
+
+    it('still applies the search box within the orphans filter', () => {
+      const list = withOrphans();
+      list.setStatusFilter('orphans');
+      list.setSearch('live');
+      expect(list.view()).toEqual([]);
+    });
+  });
+
   describe('searchPlaceholder', () => {
     it('switches copy for projects mode', () => {
       const list = setup();

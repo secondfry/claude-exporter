@@ -22,6 +22,7 @@ import {
   storageSet,
 } from '$platform';
 
+import { clearCachePrompt, countOrphans } from './clearCache';
 import {
   eventValue,
   hideStatus,
@@ -249,8 +250,25 @@ const refreshCacheStats = async (): Promise<void> => {
   setText('cacheStats', await readCacheDescription());
 };
 
+/**
+ * True when the user has agreed to lose whatever this clear would destroy.
+ *
+ * Checking costs one request to claude.ai, on a button that used to be
+ * instant. That is the trade: Orphans are the only thing in the cache that
+ * cannot be fetched again, and the alternative is destroying them silently.
+ */
+const clearWasAgreed = async (): Promise<boolean> => {
+  const { confirm: needed, message } = clearCachePrompt(
+    await countOrphans(readInputValue('orgId')),
+  );
+  if (!needed) return true;
+  return window.confirm(message);
+};
+
 const emptyCache = async (): Promise<void> => {
   hideStatus('cacheStatus');
+  if (!(await clearWasAgreed())) return;
+
   try {
     await clearCache();
   } catch (error) {

@@ -171,6 +171,25 @@ const clearRecords = async (): Promise<void> => {
   quotaExceeded = false;
 };
 
+/**
+ * Every cached uuid, keys only.
+ *
+ * `getAllKeys` rather than a cursor over the records because the values are the
+ * whole point of the cache: a large account's records run to hundreds of
+ * megabytes, and Orphan detection needs no byte of them — only which uuids are
+ * present, to diff against the conversation list. Reading the values to answer
+ * a question about the keys would deserialise the entire cache to find the
+ * handful of entries that are no longer upstream.
+ */
+const listRecordUuids = async (): Promise<string[]> => {
+  const db = await getDatabase();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const keys = await promisify(tx.objectStore(STORE_NAME).getAllKeys());
+  // keyPath is 'uuid', so every key is the string it was written under. The
+  // predicate is how that is established rather than asserted.
+  return keys.filter((key): key is string => typeof key === 'string');
+};
+
 const countRecords = async (): Promise<number> => {
   const db = await getDatabase();
   const tx = db.transaction(STORE_NAME, 'readonly');
@@ -192,6 +211,7 @@ export {
   countRecords,
   getRecord,
   isQuotaExceeded,
+  listRecordUuids,
   putRecord,
   resetForTests,
 };
