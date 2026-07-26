@@ -1,8 +1,16 @@
 # Changelog
 
+## [1.19.3]
+
+**Install-from-source instructions pointed at directories deleted in v1.11.0.** They told you to load the and folders, which ADR-0001 collapsed into a single tree built into , and they never mentioned building at all — so the section could not work as written. Adds the build step, corrects both load targets, and records the two Firefox facts that make a fresh install look broken: host permissions are optional under MV3 and start ungranted, and an already-open claude.ai tab needs a refresh before the content script is there.
+
+Also notes that a temporary add-on needs no signing, or ZIP — it loads from [3g
+H H H H H H H H H H  
+directly.
+
 ## [1.19.2]
 
-**Docs caught up with the two commits before them.** CLAUDE.md still quoted a backlog of ~192 arrow-function violations against a tree that has none, and TODO.md still described `eslint-plugin-tsconfig-paths` as registered. Both read as live work. The TODO entry survives, restated as the gap the removal leaves: `no-restricted-imports` bans parent-relative paths, but nothing checks that an import which *could* use an alias does.
+**Docs caught up with the two commits before them.** CLAUDE.md still quoted a backlog of ~192 arrow-function violations against a tree that has none, and TODO.md still described `eslint-plugin-tsconfig-paths` as registered. Both read as live work. The TODO entry survives, restated as the gap the removal leaves: `no-restricted-imports` bans parent-relative paths, but nothing checks that an import which _could_ use an alias does.
 
 Also ignores `.claude/`, which holds session state and git worktrees — committing those adds embedded-repo gitlinks that no clone can resolve.
 

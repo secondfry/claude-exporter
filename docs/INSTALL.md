@@ -42,18 +42,31 @@ For developers or those who want to build from source:
 ### Prerequisites
 
 - **Chrome**: Google Chrome browser (or Chromium-based browser like Edge, Brave, etc.)
-- **Firefox**: Mozilla Firefox (version 58 or later)
+- **Firefox**: Mozilla Firefox 109 or later (the manifest sets `strict_min_version`)
+- Node.js and npm — the source is TypeScript and **must be built**. There is no
+  loadable extension directory in the repository itself
 - Git (optional, for cloning)
 - A Claude.ai account
 
+### Build first (either browser)
+
+```bash
+git clone https://github.com/agoramachina/claude-exporter.git
+cd claude-exporter
+npm install
+npm run build
+```
+
+This writes `dist/chrome/` and `dist/firefox/`. Those two directories are what you
+load below — loading the repository root or `src/` will not work.
+
+Note that the build prints `✓ built` before it has emitted `content.js` and
+`background.js`; those come from a second pass. Confirm both files exist in the
+output directory before loading.
+
 ### Chrome Installation from Source
 
-1. **Clone or Download the Repository**
-
-   ```bash
-   git clone https://github.com/agoramachina/claude-exporter.git
-   cd claude-exporter
-   ```
+1. **Build** (see above)
 
 2. **Open Chrome Extensions Page**
    - Navigate to `chrome://extensions/`
@@ -64,7 +77,7 @@ For developers or those who want to build from source:
 
 4. **Load the Extension**
    - Click "Load unpacked"
-   - Select the `chrome` folder (inside the repository)
+   - Select the `dist/chrome` folder
    - The extension icon should appear in your toolbar
 
 5. **Proceed to [Configuration](#configuration)**
@@ -73,35 +86,43 @@ For developers or those who want to build from source:
 
 #### Option 1: Temporary Installation (For Development)
 
-1. **Clone or Download the Repository** (if not already done)
+No signing, no `.xpi`, no ZIP — a temporary add-on loads directly from the built
+directory.
 
-   ```bash
-   git clone https://github.com/agoramachina/claude-exporter.git
-   cd claude-exporter
-   ```
+1. **Build** (see above)
 
 2. **Load in Firefox**
    - Open Firefox and navigate to `about:debugging`
    - Click "This Firefox" in the left sidebar
    - Click "Load Temporary Add-on..."
-   - Navigate to the `firefox` folder (inside the repository)
-   - Select the `manifest.json` file
-   - Extension loads until you restart Firefox
+   - Select `dist/firefox/manifest.json` — the **file**, not the folder
+   - Extension loads until you restart Firefox; after a rebuild, use **Reload** on
+     the same page rather than selecting the file again
 
-3. **Proceed to [Configuration](#configuration)**
+3. **Grant host access** — Firefox MV3 host permissions are optional and start
+   ungranted, so the extension can be installed yet unable to reach claude.ai. Open
+   `about:addons` → Claude Exporter → Permissions and allow access to claude.ai.
+   Chrome grants these automatically; Firefox does not.
+
+4. **Refresh any open claude.ai tab** — the content script only auto-injects into
+   navigations that happen after loading.
+
+5. **Proceed to [Configuration](#configuration)**
 
 #### Option 2: Developer Installation (Unsigned, Permanent)
 
-**Not recommended** - only for advanced development:
+**Not recommended** - only for advanced development. Prefer Option 1; this one
+disables signature checking for every add-on in the browser, not just this one.
 
-1. Clone the repository (see Option 1)
+1. Build the extension (see above)
 2. Open Firefox and navigate to `about:config`
 3. Search for `xpinstall.signatures.required`
 4. Set it to `false` (this allows unsigned extensions)
-5. Package the extension:
+5. Package the extension — zip the _contents_ of `dist/firefox/`, so that
+   `manifest.json` sits at the root of the archive rather than inside a folder:
    ```bash
-   cd firefox
-   zip -r ../claude-exporter-firefox.zip *
+   cd dist/firefox
+   zip -r ../../claude-exporter-firefox.zip *
    ```
 6. Go to `about:addons`
 7. Click the gear icon → "Install Add-on From File..."
@@ -163,7 +184,7 @@ If you see this error when trying to export the current conversation:
 
 #### Extension doesn't appear after loading
 
-- Make sure you selected the `chrome` folder, not a subfolder
+- Make sure you selected `dist/chrome`, not the repository root or a subfolder
 - Check that Developer mode is enabled
 - Look in the Extensions page for any error messages
 
