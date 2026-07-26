@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { resolve } from "node:path";
 import { build as viteBuild, defineConfig, type Plugin } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
 import { getManifest, type Target } from "./src/manifest.config";
 
 const ROOT = resolve(__dirname);
@@ -36,6 +37,11 @@ function iifeEntriesPlugin(outDir: string): Plugin {
         await viteBuild({
           configFile: false,
           publicDir: false,
+          // `configFile: false` means this inner build inherits NOTHING from
+          // the outer config — not its plugins, not its resolver. Without its
+          // own copy of the tsconfig path resolution, every `$features/...`
+          // import in content/background fails to resolve.
+          plugins: [tsconfigPaths({ root: ROOT })],
           build: {
             outDir,
             emptyOutDir: false,
@@ -165,6 +171,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      tsconfigPaths({ root: ROOT }),
       flattenHtmlPlugin(),
       manifestPlugin(target),
       staticAssetsPlugin(outDir),

@@ -4,6 +4,12 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "$entrypoints/*": ["src/entrypoints/*"],
+      "$features/*": ["src/features/*"],
+      "$platform": ["src/platform"]
+    },
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["chrome", "vitest/globals"],
     "resolveJsonModule": true,
@@ -12,5 +18,11 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "types",
+    "eslint.config.ts",
+    "vite.config.ts",
+    "vitest.setup.ts"
+  ]
 }
