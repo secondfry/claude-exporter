@@ -1,6 +1,6 @@
 {
   "name": "claude-exporter",
-  "version": "1.19.0",
+  "version": "1.19.1",
   "private": true,
   "type": "module",
   "description": "Export conversations and artifacts from Claude.ai",
@@ -28,7 +28,6 @@
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-perfectionist": "^5.10.0",
-    "eslint-plugin-tsconfig-paths": "^1.0.0",
     "fake-indexeddb": "^6.2.5",
     "jiti": "^2.7.0",
     "prettier": "^3.9.6",

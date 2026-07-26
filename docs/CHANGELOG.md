@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.19.1]
+
+**Dropped `eslint-plugin-tsconfig-paths`.** Its rule had been registered but `off` since the tooling landed, and keeping it wired cost an ESLint-8 compatibility shim, an ambient type declaration and a dependency, all to serve a rule that never ran. Three things were wrong with it here: it calls `context.getFilename()`/`getSourceCode()`, removed in ESLint 10; it feeds `path.normalize`d patterns to picomatch v2, which reads the resulting `\` as an escape character, so on Windows no alias ever matches and every relative import is reported as having no candidates; and it rewrites sibling imports too, which this project keeps relative on purpose.
+
+`no-restricted-imports`' `../*` pattern already expresses the actual rule — parent-relative imports are banned, siblings are not — and it works on every platform. `vite-tsconfig-paths`, which is a different package and does the alias resolution in both Vite passes, is untouched.
+
 ## [1.19.0]
 
 **The one-function-form rule is now enforced.** No behaviour changes; the conversion is syntactic.

@@ -1,43 +1,12 @@
-import type { ESLint, Linter, Rule } from 'eslint';
+import type { Linter } from 'eslint';
 import prettier from 'eslint-config-prettier';
 import perfectionist from 'eslint-plugin-perfectionist';
-import tsconfigPaths from 'eslint-plugin-tsconfig-paths';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
 // Perfectionist's own option types are not exported per-rule, so the shared
 // fragments below are typed as plain rule entries.
 type RuleEntry = Linter.RuleEntry;
-
-// eslint-plugin-tsconfig-paths was written against ESLint 8 and still calls the
-// `context.getFilename()` / `context.getSourceCode()` accessors that ESLint 10
-// removed in favour of the `filename` / `sourceCode` properties. A proxy that
-// puts the two methods back is the whole of the incompatibility — the rule
-// logic itself is version-agnostic. Drop this once the plugin is updated.
-const withEslint8ContextAccessors = (plugin: {
-  rules: Record<string, Rule.RuleModule>;
-}): ESLint.Plugin => ({
-  rules: Object.fromEntries(
-    Object.entries(plugin.rules).map(([name, rule]) => [
-      name,
-      {
-        ...rule,
-        create: (context: Rule.RuleContext) =>
-          rule.create(
-            new Proxy(context, {
-              get(target, property) {
-                if (property === 'getFilename') return () => target.filename;
-                if (property === 'getSourceCode')
-                  return () => target.sourceCode;
-                const value: unknown = Reflect.get(target, property);
-                return value;
-              },
-            }),
-          ),
-      },
-    ]),
-  ),
-});
 
 // Extension point (unused on purpose): a discriminated union sorts badly under
 // a plain natural sort, because the discriminant key belongs first rather than
@@ -114,9 +83,6 @@ const config = defineConfig(
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
-    },
-    plugins: {
-      'tsconfig-paths': withEslint8ContextAccessors(tsconfigPaths),
     },
     rules: {
       '@typescript-eslint/no-namespace': ['error', { allowDeclarations: true }],
@@ -199,21 +165,6 @@ const config = defineConfig(
         'error',
         { groups: ['unknown', 'nullish'], type: 'natural' },
       ],
-
-      // Registered but off, for two independent reasons:
-      //
-      // 1. It rewrites EVERY relative import, siblings included. This project
-      //    keeps `./sibling` relative on purpose — perfectionist even sorts a
-      //    dedicated 'sibling' group. Only parent-relative imports are banned,
-      //    and `no-restricted-imports` above already does exactly that.
-      // 2. It does not work on Windows at all: it feeds `path.normalize`d
-      //    patterns to picomatch v2, which reads the resulting `\` as an escape
-      //    character, so no alias ever matches and every relative import is
-      //    reported as "has no alias canditates".
-      //
-      // The plugin stays wired so re-enabling is a one-line change once the
-      // sibling behaviour is configurable and the separator bug is fixed.
-      'tsconfig-paths/ensure': 'off',
     },
   },
 

@@ -17,11 +17,5 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": [
-    "src",
-    "types",
-    "eslint.config.ts",
-    "vite.config.ts",
-    "vitest.setup.ts"
-  ]
+  "include": ["src", "eslint.config.ts", "vite.config.ts", "vitest.setup.ts"]
 }
