@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.20.0]
+
+**This fork has its own Firefox add-on ID.** `browser_specific_settings.gecko.id` still carried `{25798758-...}`, which belongs to the upstream agoramachina AMO listing. Signing against an ID you do not own fails outright, and a build claiming it would collide with the store version on install. Replaced with a freshly generated UUID; AMO treats this as a distinct add-on, so it installs and updates independently of upstream.
+
+**Adds `npm run sign:firefox`.** Builds the Firefox target and signs it through AMO's unlisted channel via `web-ext`, writing the `.xpi` to `releases/signed/` (gitignored). Credentials come from `WEB_EXT_API_KEY`/`WEB_EXT_API_SECRET` in the environment, never from a file. Unlisted signing is what makes a permanent install possible without publishing to the public directory.
+
+**Corrects a load-bearing error in INSTALL.md.** It recommended setting `xpinstall.signatures.required=false` to install unsigned add-ons permanently. That pref is ignored on Firefox Release and Beta — it only works on Developer Edition, Nightly and ESR — so the documented path silently fails for most users. Replaced with the signing route.
+
 ## [1.19.3]
 
 **Install-from-source instructions pointed at directories deleted in v1.11.0.** They told you to load the `chrome/` and `firefox/` folders, which ADR-0001 collapsed into a single `src/` tree built into `dist/`, and they never mentioned building at all — so the section could not work as written. Adds the build step, corrects both load targets, and records the two Firefox facts that make a fresh install look broken: host permissions are optional under MV3 and start ungranted, and an already-open claude.ai tab needs a refresh before the content script is there.

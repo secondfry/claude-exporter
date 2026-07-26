@@ -109,26 +109,52 @@ directory.
 
 5. **Proceed to [Configuration](#configuration)**
 
-#### Option 2: Developer Installation (Unsigned, Permanent)
+#### Option 2: Permanent Installation (Signed .xpi)
 
-**Not recommended** - only for advanced development. Prefer Option 1; this one
-disables signature checking for every add-on in the browser, not just this one.
+A temporary add-on is dropped every time Firefox restarts. Surviving a restart
+requires a Mozilla signature — there is no pref that avoids this on release
+Firefox (see the warning below). Signing is free, and the _unlisted_ channel signs
+a build for your own use without publishing it to the public add-ons directory.
 
-1. Build the extension (see above)
-2. Open Firefox and navigate to `about:config`
-3. Search for `xpinstall.signatures.required`
-4. Set it to `false` (this allows unsigned extensions)
-5. Package the extension — zip the _contents_ of `dist/firefox/`, so that
-   `manifest.json` sits at the root of the archive rather than inside a folder:
+1. **Create an AMO account** at [addons.mozilla.org](https://addons.mozilla.org/)
+   and generate API credentials at
+   [Manage API Keys](https://addons.mozilla.org/en-US/developers/addon/api/key/).
+
+2. **Export the credentials** — `web-ext` reads these from the environment, so
+   they never enter the repository:
+
    ```bash
-   cd dist/firefox
-   zip -r ../../claude-exporter-firefox.zip *
+   export WEB_EXT_API_KEY='user:12345678:123'
+   export WEB_EXT_API_SECRET='...'
    ```
-6. Go to `about:addons`
-7. Click the gear icon → "Install Add-on From File..."
-8. Select the `claude-exporter-firefox.zip` file
 
-**Warning**: Setting `xpinstall.signatures.required` to `false` disables important security protections. Only use for development.
+   PowerShell: `$env:WEB_EXT_API_KEY = 'user:12345678:123'`
+
+3. **Build and sign**
+
+   ```bash
+   npm run sign:firefox
+   ```
+
+   This builds `dist/firefox/`, uploads it to AMO, waits for the automated
+   review, and writes the signed `.xpi` to `releases/signed/`. First run takes a
+   few minutes; AMO also emails you if validation rejects the build.
+
+4. **Install it** — open `about:addons`, click the gear icon → "Install Add-on
+   From File...", and select the `.xpi` from `releases/signed/`.
+
+5. **Grant host access and refresh claude.ai** — same as steps 3 and 4 of Option 1.
+
+The add-on ID is fixed in `src/manifest.config.ts`. AMO ties a signature to that
+ID, so it must belong to your own account; changing it later makes AMO treat the
+result as an entirely different add-on. Unlisted builds carry no update URL, so
+Firefox will never auto-update them — reinstall a newly signed `.xpi` to upgrade.
+
+**Warning about `xpinstall.signatures.required`**: older guides suggest setting
+this to `false` in `about:config` to install unsigned add-ons permanently. It is
+ignored on Firefox **Release and Beta** — the pref is only honoured on Developer
+Edition, Nightly and ESR. Even where it works it disables signature checking for
+every add-on in the browser, not just this one.
 
 ---
 

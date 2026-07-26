@@ -4,7 +4,11 @@ type Target = 'chrome' | 'firefox';
 
 const EXTENSION_NAME = 'Claude Exporter';
 
-const GECKO_EXTENSION_ID = '{25798758-c184-470a-bb5b-9fa76a09d9b5}';
+// This fork's own AMO identity. The previous value belonged to the upstream
+// agoramachina listing; signing against an ID you do not own fails, and
+// installing a build that claims it would collide with the store version.
+// Changing this again means AMO treats the result as a different add-on.
+const GECKO_EXTENSION_ID = '{61bd6473-8d21-4bbf-8bcd-ea55e56fcb47}';
 
 const getManifest = (target: Target) => {
   const base = {
