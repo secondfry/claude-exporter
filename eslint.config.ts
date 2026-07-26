@@ -89,9 +89,12 @@ const functionDeclarationSelector = {
 
 const functionExpressionSelector = {
   message:
-    'Use arrow functions instead of function expressions. Method shorthands and generators are exempt.',
+    'Use arrow functions instead of function expressions. Method shorthands, accessors and generators are exempt.',
+  // Accessors are marked `method: false, kind: 'get' | 'set'` in ESTree, so the
+  // method-shorthand exemption does not cover them — and a getter has no arrow
+  // form at all, so matching one would be an unsatisfiable report.
   selector:
-    ':not(MethodDefinition, Property[method=true]) > FunctionExpression:not([generator=true])',
+    ":not(MethodDefinition, Property[method=true], Property[kind='get'], Property[kind='set']) > FunctionExpression:not([generator=true])",
 };
 
 const config = defineConfig(
