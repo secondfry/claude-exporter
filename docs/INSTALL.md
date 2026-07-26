@@ -2,9 +2,17 @@
 
 Complete installation instructions for Claude Exporter on Chrome and Firefox.
 
-## Install from Browser Store (Recommended)
+> **This fork is not published anywhere.** The store listings and Releases page
+> below belong to [upstream](https://github.com/agoramachina/claude-exporter), and
+> they do not carry the changes in this repository. To run this build, go to
+> [Install from Source](#install-from-source). The two can be installed side by
+> side — this fork has its own add-on ID, so Firefox treats it as a separate
+> add-on with separate storage.
 
-The simplest way to install Claude Exporter and receive automatic updates:
+## Install Upstream from a Browser Store
+
+The simplest way to install the published Claude Exporter and receive automatic
+updates:
 
 - **Chrome/Chromium-based browsers:** [Chrome Web Store](https://chromewebstore.google.com/detail/claude-exporter/niicpkfpebcmikhdmmjnlamoljlabkni?hl=en)
 - **Firefox:** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/claude-exporter/)
@@ -13,9 +21,10 @@ After installing, proceed to [Configuration](#configuration).
 
 ---
 
-## Install from Releases (.zip / .xpi)
+## Install Upstream from Releases (.zip / .xpi)
 
-For users who want to install manually without the browser stores.
+For users who want to install the published build manually, without the browser
+stores.
 
 ### Chrome (and Chromium-based browsers)
 
@@ -51,7 +60,7 @@ For developers or those who want to build from source:
 ### Build first (either browser)
 
 ```bash
-git clone https://github.com/agoramachina/claude-exporter.git
+git clone https://github.com/secondfry/claude-exporter.git
 cd claude-exporter
 npm install
 npm run build
@@ -268,8 +277,9 @@ If you see this error when exporting from a conversation page:
 
 #### "This add-on could not be installed because it has not been verified"
 
-- Use the signed `.xpi` from the Releases page, not a self-built zip
-- Or use temporary installation via `about:debugging` for development
+- A self-built ZIP is not installable in Firefox — see
+  [Option 2](#option-2-permanent-installation-signed-xpi) for signing your own
+  build, or use temporary installation via `about:debugging` for development
 
 ---
 
@@ -277,35 +287,37 @@ If you see this error when exporting from a conversation page:
 
 ### Technical Differences
 
-The Firefox and Chrome versions are functionally identical but use different APIs:
+There is one TypeScript source tree. Both targets are built from it and both are
+Manifest V3, so the JavaScript is identical byte for byte — the builds differ only
+in `manifest.json`:
 
-**Firefox version:**
+- **Chrome** declares `background.service_worker`
+- **Firefox** declares `background.scripts`, plus a
+  `browser_specific_settings.gecko` block carrying the add-on ID and
+  `strict_min_version`
 
-- Manifest V2 (more stable in Firefox)
-- `browser_action` instead of `action`
-- `tabs.executeScript()` instead of `scripting.executeScript()`
-- `options_ui` for better Firefox integration
+The one difference you will actually notice is permissions. Under Firefox's MV3,
+host permissions are **optional and user-revocable**, so the extension can be
+installed and still be unable to reach claude.ai until you grant access in
+`about:addons`. Chrome grants them at install time and never asks.
 
-**Chrome version:**
-
-- Manifest V3 (required for Chrome)
-- `action` API
-- `scripting.executeScript()` API
-- `options_page`
-
-All core functionality remains the same across both browsers!
+(Firefox shipped as Manifest V2 through v1.10.x. It moved to MV3 in v1.11.0 along
+with the source-tree collapse — see [ADR-0001](adr/0001-single-typescript-source-tree.md).)
 
 ### Installation Methods Comparison
 
 #### Firefox Installation Methods
 
-| Feature                | Signed .xpi (Recommended) | Temporary           | Unsigned (Dev Mode)  |
-| ---------------------- | ------------------------- | ------------------- | -------------------- |
-| Persists after restart | ✅                        | ❌                  | ✅                   |
-| Requires dev mode      | ❌                        | ❌                  | ✅                   |
-| Easy to install        | ✅                        | ✅                  | ⚠️                   |
-| Mozilla-signed         | ✅                        | N/A                 | ❌                   |
-| Recommended for        | General use               | Development/testing | Advanced development |
+| Feature                | Store       | Signed .xpi            | Temporary           |
+| ---------------------- | ----------- | ---------------------- | ------------------- |
+| Persists after restart | ✅          | ✅                     | ❌                  |
+| Auto-updates           | ✅          | ❌ (reinstall)         | N/A                 |
+| Needs AMO credentials  | ❌          | ✅                     | ❌                  |
+| Mozilla-signed         | ✅          | ✅                     | N/A                 |
+| Recommended for        | General use | Running your own build | Development/testing |
+
+There is no fourth column for unsigned permanent installs. Release and Beta
+Firefox will not load an unsigned add-on at all, whatever `about:config` says.
 
 #### Chrome Installation Methods
 
@@ -320,12 +332,16 @@ All core functionality remains the same across both browsers!
 
 ## Using Both Browsers
 
-The repository includes separate folders for Chrome and Firefox, so you can easily use both:
+One `npm run build` produces both targets, so you can run the extension in both
+browsers from the same checkout:
 
-- Use the `chrome/` folder for Chrome installation
-- Use the `firefox/` folder for Firefox installation
+- Load `dist/chrome/` in Chrome
+- Load `dist/firefox/` in Firefox
 
-Both folders are complete, standalone extensions with no need to switch files!
+Each output directory is a complete, standalone extension. Note that the two
+browsers keep entirely separate storage, so Export Records, preferences and the
+Chat Cache do not follow you from one to the other — use Backup & Restore on the
+options page to move them.
 
 ---
 
@@ -351,7 +367,8 @@ If you encounter issues:
 1. Check the browser console for errors:
    - **Chrome**: Right-click on page → Inspect → Console tab
    - **Firefox**: Ctrl+Shift+J (Cmd+Option+J on Mac)
-2. Verify you're using the correct folder (`chrome/` or `firefox/`)
+2. Verify you're loading the built output (`dist/chrome/` or `dist/firefox/`), not
+   the repository root
 3. Make sure your browser version is up to date
 4. Check the [Troubleshooting](#troubleshooting) section above
 5. Open an issue on GitHub with:

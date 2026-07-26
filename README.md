@@ -1,145 +1,198 @@
 # Claude Exporter
 
-A browser extension for Chrome and Firefox that allows you to export your Claude.ai conversations and artifacts in various formats with support for bulk exports, artifact extraction, and conversation browsing.
+A Chrome and Firefox extension that pulls your claude.ai conversations off the
+site and writes them to local files — one at a time, or thousands at once as a
+ZIP.
 
-## Features
+It keeps track of what you have already exported and what has changed since, and
+it caches conversation content locally so re-exporting the same chats does not
+touch the network again.
 
-- 📥 **Export Individual Conversations** - Export any conversation directly from Claude.ai
-- 📚 **Bulk Export** - Export all or filtered conversations as a ZIP file
-- 🔍 **Browse & Search** - View all your conversations in a searchable table
-- 🔀 **Sort Conversations** - Sort by name, date, project, model, and more
-- 🌳 **Branch-Aware Export** - Correctly handles conversation branches
-- 📝 **Multiple Formats** - JSON (full data), Markdown, or Plain Text
-- 📦 **Artifact Export** - Extract artifacts (code, documents, etc.) as separate files
-- 🎯 **Flexible Export Options** - Choose to include conversations, artifacts inline, or artifacts as separate files
-- 🗂️ **ZIP Archives** - Bulk exports create organized ZIP files with conversations and artifacts
-- 🏷️ **Metadata Options** - Include or exclude timestamps, models, and other metadata
-- 🤖 **Complete Model Information** - Preserves and displays model information for all conversations
-- 🔮 **Smart Model Inference** - Automatically infers the correct model for conversations that used the default model at the time
-- 🔒 **Secure** - All data processing happens in your browser and is never sent anywhere
-- ☀️ **Light/Dark Mode** - Toggle between color schemes
+> This is a fork of [agoramachina/claude-exporter](https://github.com/agoramachina/claude-exporter),
+> which is itself a fork of [socketteer/Claude-Conversation-Exporter](https://github.com/socketteer/Claude-Conversation-Exporter).
+> It has its own add-on identity and is **not** the build published in the browser
+> stores. See [Installation](#installation).
 
 ---
 
-### Installation
+## What it does
 
-See [docs/INSTALL.md](docs/INSTALL.md) for installation instructions (browser stores, manual, and from source).
+**Export**
 
----
+- Export the conversation you are reading, straight from the claude.ai page
+- Bulk export any selection of conversations as a single ZIP — never a flood of
+  individual downloads
+- Three formats: **JSON** (complete, all branches), **Markdown**, **Plain text**
+- Extract artifacts as real files, nested per conversation or flattened into one
+  folder, or both at once
+- Choose what goes in: messages, extended thinking, metadata headers, attachments
 
-### Usage
+**Browse**
 
-#### Export Current Conversation
+- A sortable, searchable table of every conversation on your account
+- Multi-column sort (shift-click), search by conversation name or by project
+- Filter by export state: never exported, updated since export, previously
+  exported, or everything still pending
+- Model column that survives a model bounce — the extension snapshots which model
+  a conversation used when it first saw it, so a chat started on an older model
+  does not silently relabel itself when claude.ai moves it
 
-1. Navigate to any conversation on claude.ai
-2. Click the extension icon
-3. Choose your export format and metadata preferences
-4. Click "Export Current Conversation"
+**Remember**
 
-#### Browse All Conversations
+- **Export Records** — a green dot marks conversations you have never exported and
+  ones you have edited since. Bulk export auto-selects exactly those.
+- **Chat Cache** — conversation content already downloaded is kept in IndexedDB
+  and reused. A cached copy is only used while claude.ai still reports the same
+  last-updated time, so an edited chat is always refetched. Clearing it loses
+  nothing but speed.
+- **Backup & Restore** — save your Export Records, model snapshots and preferences
+  to a file and restore them in another browser or another build. Deliberately
+  does not include the Chat Cache.
 
-1. Click the extension icon
-2. Click "Browse All Conversations" (green button)
-3. In the browse page, you can:
-   - Search conversations by name
-   - Filter by model
-   - Sort by date or name
-   - Export individual conversations
-   - Export all filtered conversations as ZIP
-
-#### Bulk Export
-
-1. In the browse page, select your format and filters
-2. Click "Export All"
-3. A progress dialog will show the export status
-4. Once complete, a ZIP file will download containing all conversations
-
----
-
-### Export Formats
-
-#### JSON
-
-- Complete data including all branches and metadata
-- Best for data preservation and programmatic use
-- Includes all message versions and conversation branches
-
-#### Markdown
-
-- Human-readable format with formatting
-- Shows only the current conversation branch
-- Includes optional metadata (timestamps, model info)
-- Great for documentation or sharing
-
-#### Plain Text
-
-- Simple format following Claude's prompt style
-- Uses "User:" and "Claude:" prefixes
-- Shows only the current conversation branch
-- Ideal for copying into other LLMs or text editors
+Everything runs in your browser against your own logged-in session. No data goes
+anywhere else.
 
 ---
 
-### Troubleshooting
+## Installation
 
-#### "Organization ID not configured"
+Full instructions, including troubleshooting, are in
+**[docs/INSTALL.md](docs/INSTALL.md)**.
 
-- Follow the setup steps in [docs/INSTALL.md](docs/INSTALL.md#configuration)
-- Make sure you're copying the complete UUID from the URL
+The short version for this fork:
 
-#### "Not authenticated" error
+```bash
+npm install
+npm run build          # writes dist/chrome/ and dist/firefox/
+```
 
-- Make sure you're logged into Claude.ai
-- Try refreshing the Claude.ai page
+- **Chrome** — `chrome://extensions/`, enable Developer mode, **Load unpacked**,
+  select `dist/chrome/`.
+- **Firefox, for development** — `about:debugging` → **Load Temporary Add-on**,
+  select `dist/firefox/manifest.json` (the file, not the folder). Dropped on
+  restart.
+- **Firefox, permanently** — `npm run sign:firefox` signs the build through your
+  own AMO account on the unlisted channel, then install the `.xpi` from
+  `releases/signed/` via `about:addons`. Release and Beta Firefox will not load an
+  unsigned add-on at all, whatever `about:config` claims.
 
-#### Export fails for some conversations
+Firefox users: MV3 host permissions are optional and start **ungranted**, so the
+extension can install and still be unable to reach claude.ai. Grant access under
+`about:addons` → Claude Exporter → Permissions, then refresh any open claude.ai
+tab. Chrome grants them at install time.
 
-- Some very old conversations might have different data structures
-- Check the browser console for specific error messages
-- The ZIP export includes a summary file listing any failed exports
-
-#### Content Security Policy errors
-
-- Make sure you're using the latest version of the extension
-- Try reloading the extension from chrome://extensions/
-
-**For browser-specific troubleshooting issues**, see [docs/INSTALL.md](docs/INSTALL.md#Troubleshooting)
-
----
-
-### Known Limitations
-
-- Rate limiting: The extension processes conversations in small batches to avoid overwhelming the API
-- Using a VPN may return a 403 error when trying to connect to the Claude API
-- Plaintext and markdown formats only export the currently selected branch in conversations with multiple branches
-- Large bulk exports may take several minutes
-- Some special content types (like artifacts) may not export perfectly
-- API does not preserve per-message model data
-  - `conversation.model` from the API is the _current_ model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
+Then set your Organization ID on the options page — or just export something; it
+is auto-detected on every export action.
 
 ---
 
-### Privacy & Security
+## Usage
 
-- **Local Processing**: All data processing happens in your browser
-- **No External Servers**: The extension doesn't send data anywhere
-- **Your Authentication**: Uses your existing Claude.ai session
-- **Open Source**: You can review all code before installation
+**One conversation** — open it on claude.ai, click the extension icon, pick a
+format, click Export Current Conversation.
 
----
+**Many** — click the extension icon → Browse All Conversations. Filter and sort to
+what you want, select rows (shift-click for ranges), pick your format and options,
+Export Selected. A progress dialog reports how many came from the Chat Cache.
 
-### Contributing
-
-Feel free to submit issues or pull requests if you find bugs or have suggestions for improvements!
+**Everything** — Export All from the popup, without opening the browse page.
 
 ---
 
-### Acknowledgments
+## Formats
 
-- **Original Project**: Forked from [socketteer/Claude-Conversation-Exporter](https://github.com/socketteer/Claude-Conversation-Exporter)
-- **Code Development**: Written in collaboration with Claude Code (Sonnet 4.5 and Opus 4.5, 4.6, 4.7)
-- **ZIP Library**: Uses [JSZip](https://stuk.github.io/jszip/) for creating ZIP archives
+| Format         | Branches                        | Best for                                |
+| -------------- | ------------------------------- | --------------------------------------- |
+| **JSON**       | All, plus every message version | Preservation, scripting, re-import      |
+| **Markdown**   | Current branch only             | Reading, documentation, sharing         |
+| **Plain text** | Current branch only             | Pasting into another model or an editor |
+
+Markdown renders thinking blocks, pasted text and attachment metadata under their
+own headings. Code artifacts always keep their original file type; prose artifacts
+follow your chosen format.
 
 ---
 
-**Note**: This extension is not officially affiliated with Anthropic or Claude.ai. It's a community tool that uses the web interface's API endpoints.
+## Known limitations
+
+- **Plain text and Markdown export the current branch only.** JSON is the only
+  format that preserves alternate branches. If a conversation matters, export JSON.
+- **The API does not record which model wrote which message.** `conversation.model`
+  is the _current_ model. The extension's own snapshots are the only record of what
+  a chat started on, and they only cover chats it has seen — for older ones the
+  original model is unrecoverable.
+- **Orphans are not yet reachable.** If a conversation is deleted from claude.ai,
+  its Chat Cache entry may be the last copy in existence, but the browse table is
+  built from the live conversation list, so it no longer appears. Do not treat the
+  Chat Cache as an archive; the exported file is the archive.
+- **Cancel is not immediate.** Stopping a bulk export hides the dialog, but fetches
+  already in flight run to completion.
+- **A VPN can produce 403s** from the claude.ai API.
+- Very large exports take minutes, and very old conversations occasionally use data
+  shapes that fail to convert — the ZIP includes a summary listing anything skipped.
+- Development and testing happen primarily in Firefox.
+
+---
+
+## Development
+
+One TypeScript source tree in `src/`, built by Vite into `dist/chrome/` and
+`dist/firefox/`. Both targets are Manifest V3 and share identical JavaScript; they
+differ only in `manifest.json`. Browser divergence is confined to `src/platform/`.
+
+| Command                |                              |
+| ---------------------- | ---------------------------- |
+| `npm run build`        | both targets into `dist/`    |
+| `npm run dev`          | Chrome build, watch mode     |
+| `npm test`             | Vitest                       |
+| `npm run typecheck`    | `tsc --noEmit`               |
+| `npm run lint`         | ESLint                       |
+| `npm run format`       | Prettier                     |
+| `npm run sign:firefox` | build + AMO unlisted signing |
+
+```
+src/
+├── entrypoints/   popup, browse, options, content script, background worker
+├── features/      artifacts, backup, cache, conversation, conversation-list,
+│                  diagnostics, export, models, rendering, tracking
+└── platform/      the only place Chrome and Firefox differ in code
+```
+
+Entrypoints are thin — they wire UI and call into `features/`. There is one export
+pipeline (`features/export/`) with two callers, and it must stay that way; the
+private copies they used to have drifted badly.
+
+Before changing anything structural, read:
+
+- **[CONTEXT.md](CONTEXT.md)** — the domain glossary. _Export Record_ ("the user
+  got a file") and _Chat Cache_ ("we hold the bytes") are independent concepts, and
+  "exported" is ambiguous between them.
+- **[docs/adr/](docs/adr/)** — why the single source tree, why IndexedDB, why the
+  cache lives on the extension origin. The rejected alternatives are the useful
+  part.
+- **[CLAUDE.md](CLAUDE.md)** — the rules that are easy to violate by accident.
+
+[docs/TODO.md](docs/TODO.md) is the backlog; [docs/CHANGELOG.md](docs/CHANGELOG.md)
+records why each version changed.
+
+---
+
+## Privacy
+
+The extension talks to claude.ai using your existing browser session and nothing
+else. There is no server, no telemetry, and no third party. Exports are written by
+your browser's own download mechanism; the Chat Cache never leaves your machine.
+
+---
+
+## Acknowledgments
+
+- Forked from [agoramachina/claude-exporter](https://github.com/agoramachina/claude-exporter),
+  originally [socketteer/Claude-Conversation-Exporter](https://github.com/socketteer/Claude-Conversation-Exporter)
+- ZIP archives via [JSZip](https://stuk.github.io/jszip/)
+- Written in collaboration with Claude Code
+
+---
+
+**Not affiliated with Anthropic.** This is a community tool built on the endpoints
+the claude.ai web interface uses.

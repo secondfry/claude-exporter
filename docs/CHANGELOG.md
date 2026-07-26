@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.21.1]
+
+**README rewritten; INSTALL.md's "Browser Differences" was still describing a Firefox build that stopped existing in v1.11.0.** It claimed Manifest V2, `browser_action` and `tabs.executeScript()` — all three gone with the MV3 migration in ADR-0001 — and the "Using Both Browsers" section still told readers to load `chrome/` and `firefox/` folders that were deleted in the same release. Replaced with what actually differs now: one background key in the manifest, and Firefox's optional host permissions.
+
+The README described a model filter dropdown removed in v1.5.0 and never mentioned Export Records, the Chat Cache or Backup — the three things the extension has spent the last ten versions building. It also presented the store listings as this build's, which they are not: they are upstream's, and this fork has had its own add-on ID since v1.20.0. Both files now say so up front, so nobody installs the store version expecting these changes.
+
 ## [1.21.0]
 
 **"Previously exported" hid conversations that had been exported.** The browse filter asked one boolean, `isStale()`, which returned true both for a Conversation with no Export Record and for one whose content changed after its record was written. So a chat you exported and then continued fell out of "Previously exported" entirely — even though it plainly has an Export Record.
