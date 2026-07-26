@@ -1,0 +1,7 @@
+# Git for Windows ships core.autocrlf=true at system level, so a checkout here
+# gets CRLF working copies while Prettier's endOfLine:lf writes LF. Without
+# this, `npm run format` leaves every file modified forever and
+# `prettier --check` fails on a fresh clone. Pin the working tree to LF.
+* text=auto eol=lf
+
+*.png binary
