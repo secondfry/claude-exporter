@@ -1,4 +1,8 @@
-// Extension data backup / restore
+// Backup: a user-initiated snapshot of the extension's own settings and Export
+// Records, for moving between machines. Never carries the Chat Cache — that
+// lives in IndexedDB, which this deliberately does not touch.
+
+import { getManifestVersion, storageGet, storageSet } from '../../platform';
 
 interface BackupMeta {
   app: 'claude-exporter';
@@ -13,41 +17,85 @@ interface BackupFile {
   sync: Record<string, unknown>;
 }
 
-type OnComplete = (success: boolean, message: string) => void;
+/** What the caller shows the user; each surface renders it its own way. */
+interface BackupOutcome {
+  success: boolean;
+  message: string;
+}
+
+type ImportMode = 'merge' | 'replace';
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isImportMode(value: unknown): value is ImportMode {
+  return value === 'merge' || value === 'replace';
+}
+
+/**
+ * A backup file as written by backupExtensionData. Validated rather than
+ * asserted: this is a file the user picked off disk, so it is the least
+ * trustworthy input in the extension.
+ */
+function isBackupFile(value: unknown): value is BackupFile {
+  if (!isPlainObject(value)) return false;
+  const meta = value._meta;
+  if (!isPlainObject(meta) || meta.app !== 'claude-exporter') return false;
+  return isPlainObject(value.local);
+}
+
+function countEntries(value: unknown): number {
+  return isPlainObject(value) ? Object.keys(value).length : 0;
+}
+
+function timestampSuffix(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ymd = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const hms = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `${ymd}-${hms}`;
+}
+
+function downloadJson(filename: string, payload: unknown): void {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // Download all extension storage (local + sync) as a structured JSON file.
-// onComplete(success, message) reports the result so each caller can show it
-// its own way (options page status line vs. browse-page toast).
-function backupExtensionData(onComplete?: OnComplete): void {
-  chrome.storage.local.get(null, (local) => {
-    chrome.storage.sync.get(null, (sync) => {
-      const backup: BackupFile = {
-        _meta: {
-          app: 'claude-exporter',
-          backupVersion: 1,
-          extensionVersion: chrome.runtime.getManifest().version,
-          createdAt: new Date().toISOString()
-        },
-        local: local || {},
-        sync: sync || {}
-      };
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const now = new Date();
-      const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-      const hms = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-      a.download = `claude-exporter-backup-${ymd}-${hms}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      const snapCount = Object.keys((backup.local.modelSnapshots as object) || {}).length;
-      const exportCount = Object.keys((backup.local.exportTimestamps as object) || {}).length;
-      if (onComplete) onComplete(true, `Backup exported — ${snapCount} model snapshot(s), ${exportCount} export record(s).`);
-    });
-  });
+async function backupExtensionData(): Promise<BackupOutcome> {
+  try {
+    const local = await storageGet<Record<string, unknown>>('local', null);
+    const sync = await storageGet<Record<string, unknown>>('sync', null);
+    const backup: BackupFile = {
+      _meta: {
+        app: 'claude-exporter',
+        backupVersion: 1,
+        extensionVersion: getManifestVersion(),
+        createdAt: new Date().toISOString(),
+      },
+      local: local ?? {},
+      sync: sync ?? {},
+    };
+    downloadJson(`claude-exporter-backup-${timestampSuffix(new Date())}.json`, backup);
+    const snapCount = countEntries(backup.local.modelSnapshots);
+    const exportCount = countEntries(backup.local.exportTimestamps);
+    return {
+      success: true,
+      message: `Backup exported — ${snapCount} model snapshot(s), ${exportCount} export record(s).`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Backup failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 // Conservative merge: for each top-level key in `backup`, if the key is absent
@@ -59,14 +107,13 @@ function mergeStorageData(
   current: Record<string, unknown>,
   backup: Record<string, unknown>
 ): Record<string, unknown> {
-  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-    v !== null && typeof v === 'object' && !Array.isArray(v);
   const result: Record<string, unknown> = { ...current };
   for (const [key, backupVal] of Object.entries(backup || {})) {
+    const currentVal = current[key];
     if (!(key in current)) {
       result[key] = backupVal;
-    } else if (isPlainObject(current[key]) && isPlainObject(backupVal)) {
-      result[key] = { ...backupVal, ...(current[key] as Record<string, unknown>) };
+    } else if (isPlainObject(currentVal) && isPlainObject(backupVal)) {
+      result[key] = { ...backupVal, ...currentVal };
     }
     // else: scalar conflict — current value is already in result, keep it
   }
@@ -74,14 +121,14 @@ function mergeStorageData(
 }
 
 // Show a modal letting the user choose merge vs replace BEFORE the OS file
-// picker opens. onConfirm(mode) fires with 'merge' / 'replace' when the user
-// commits, or null on Cancel / Esc / overlay click. The caller is responsible
-// for opening the file picker after a non-null mode.
-function showImportModeModal(onConfirm: (mode: 'merge' | 'replace' | null) => void): void {
-  if (!document.getElementById('claude-exporter-modal-styles')) {
-    const style = document.createElement('style');
-    style.id = 'claude-exporter-modal-styles';
-    style.textContent = `
+// picker opens. Resolves with the chosen mode, or null on Cancel / Esc /
+// overlay click. The caller opens the file picker on a non-null mode.
+function showImportModeModal(): Promise<ImportMode | null> {
+  return new Promise((resolve) => {
+    if (!document.getElementById('claude-exporter-modal-styles')) {
+      const style = document.createElement('style');
+      style.id = 'claude-exporter-modal-styles';
+      style.textContent = `
       .ce-modal-overlay {
         position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
         display: flex; align-items: center; justify-content: center;
@@ -141,16 +188,16 @@ function showImportModeModal(onConfirm: (mode: 'merge' | 'replace' | null) => vo
       }
       .ce-modal-import:hover { background: var(--primary-hover, #4a35ba); }
     `;
-    document.head.appendChild(style);
-  }
+      document.head.appendChild(style);
+    }
 
-  // Remove any stale modal before showing a new one
-  const stale = document.querySelector('.ce-modal-overlay');
-  if (stale) stale.remove();
+    // Remove any stale modal before showing a new one
+    const stale = document.querySelector('.ce-modal-overlay');
+    if (stale) stale.remove();
 
-  const overlay = document.createElement('div');
-  overlay.className = 'ce-modal-overlay';
-  overlay.innerHTML = `
+    const overlay = document.createElement('div');
+    overlay.className = 'ce-modal-overlay';
+    overlay.innerHTML = `
     <div class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-modal-title">
       <h2 id="ce-modal-title">Import Backup</h2>
       <div class="ce-modal-info">
@@ -173,81 +220,84 @@ function showImportModeModal(onConfirm: (mode: 'merge' | 'replace' | null) => vo
     </div>
   `;
 
-  document.body.appendChild(overlay);
+    document.body.appendChild(overlay);
 
-  const cleanup = (mode: 'merge' | 'replace' | null) => {
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-    onConfirm(mode);
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') cleanup(null);
-    else if (e.key === 'Enter') {
-      const checked = overlay.querySelector<HTMLInputElement>('input[name="ce-import-mode"]:checked');
-      cleanup((checked?.value as 'merge' | 'replace' | undefined) ?? null);
-    }
-  };
-  document.addEventListener('keydown', onKey);
+    const selectedMode = (): ImportMode | null => {
+      const checked = overlay.querySelector('input[name="ce-import-mode"]:checked');
+      if (!(checked instanceof HTMLInputElement)) return null;
+      return isImportMode(checked.value) ? checked.value : null;
+    };
 
-  overlay.querySelector('.ce-modal-cancel')!.addEventListener('click', () => cleanup(null));
-  overlay.querySelector('.ce-modal-import')!.addEventListener('click', () => {
-    const checked = overlay.querySelector<HTMLInputElement>('input[name="ce-import-mode"]:checked');
-    cleanup((checked?.value as 'merge' | 'replace' | undefined) ?? null);
+    const cleanup = (mode: ImportMode | null) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(mode);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cleanup(null);
+      else if (e.key === 'Enter') cleanup(selectedMode());
+    };
+    document.addEventListener('keydown', onKey);
+
+    overlay.querySelector('.ce-modal-cancel')?.addEventListener('click', () => cleanup(null));
+    overlay.querySelector('.ce-modal-import')?.addEventListener('click', () => cleanup(selectedMode()));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+
+    // Focus the default radio so keyboard users can act immediately
+    const firstRadio = overlay.querySelector('input[name="ce-import-mode"]');
+    if (firstRadio instanceof HTMLInputElement) firstRadio.focus();
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
-
-  // Focus the default radio so keyboard users can act immediately
-  const firstRadio = overlay.querySelector<HTMLInputElement>('input[name="ce-import-mode"]');
-  if (firstRadio) firstRadio.focus();
 }
 
 // Import extension storage from a file produced by backupExtensionData.
-// Validates the file, then writes to local + sync using the supplied mode
-// ('merge' or 'replace'). The mode choice is made BEFORE the file picker
-// opens (see showImportModeModal), so this function just executes.
-function importBackup(file: File, mode: 'merge' | 'replace', onComplete?: OnComplete): void {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let backup: BackupFile;
-    try {
-      backup = JSON.parse(e.target!.result as string);
-    } catch (err) {
-      if (onComplete) onComplete(false, 'Import failed: the file is not valid JSON.');
-      return;
-    }
+// Validates the file, then writes to local + sync using the supplied mode.
+// The mode choice is made BEFORE the file picker opens (see
+// showImportModeModal), so this function just executes.
+async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    return { success: false, message: 'Import failed: the file is not valid JSON.' };
+  }
 
-    if (!backup || typeof backup !== 'object' || !backup._meta ||
-        backup._meta.app !== 'claude-exporter' || typeof backup.local !== 'object') {
-      if (onComplete) onComplete(false, 'Import failed: this does not look like a Claude Exporter backup file.');
-      return;
-    }
+  if (!isBackupFile(parsed)) {
+    return {
+      success: false,
+      message: 'Import failed: this does not look like a Claude Exporter backup file.',
+    };
+  }
 
-    const snapCount = Object.keys((backup.local.modelSnapshots as object) || {}).length;
-    const exportCount = Object.keys((backup.local.exportTimestamps as object) || {}).length;
-    const syncData = (backup.sync && typeof backup.sync === 'object') ? backup.sync : {};
+  const snapCount = countEntries(parsed.local.modelSnapshots);
+  const exportCount = countEntries(parsed.local.exportTimestamps);
+  const syncData = isPlainObject(parsed.sync) ? parsed.sync : {};
+  const tail = 'Reload any open Claude pages and the browse page to see the changes.';
 
+  try {
     if (mode === 'replace') {
-      chrome.storage.local.set(backup.local, () => {
-        chrome.storage.sync.set(syncData, () => {
-          if (onComplete) onComplete(true, `Import complete (replace) — ${snapCount} model snapshot(s), ${exportCount} export record(s) restored. Reload any open Claude pages and the browse page to see the changes.`);
-        });
-      });
-    } else {
-      // Merge: missing keys added, conflicts keep local
-      chrome.storage.local.get(null, (currentLocal) => {
-        chrome.storage.sync.get(null, (currentSync) => {
-          const mergedLocal = mergeStorageData(currentLocal || {}, backup.local);
-          const mergedSync = mergeStorageData(currentSync || {}, syncData);
-          chrome.storage.local.set(mergedLocal, () => {
-            chrome.storage.sync.set(mergedSync, () => {
-              if (onComplete) onComplete(true, `Import complete (merge) — added missing entries from backup, kept your current values on overlap. Reload any open Claude pages and the browse page to see the changes.`);
-            });
-          });
-        });
-      });
+      await storageSet('local', parsed.local);
+      await storageSet('sync', syncData);
+      return {
+        success: true,
+        message: `Import complete (replace) — ${snapCount} model snapshot(s), ${exportCount} export record(s) restored. ${tail}`,
+      };
     }
-  };
-  reader.readAsText(file);
+
+    const currentLocal = await storageGet<Record<string, unknown>>('local', null);
+    const currentSync = await storageGet<Record<string, unknown>>('sync', null);
+    await storageSet('local', mergeStorageData(currentLocal ?? {}, parsed.local));
+    await storageSet('sync', mergeStorageData(currentSync ?? {}, syncData));
+    return {
+      success: true,
+      message: `Import complete (merge) — added missing entries from backup, kept your current values on overlap. ${tail}`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
-export { backupExtensionData, mergeStorageData, showImportModeModal, importBackup };
+export { backupExtensionData, importBackup, isBackupFile, mergeStorageData, showImportModeModal };
+export type { BackupOutcome, ImportMode };

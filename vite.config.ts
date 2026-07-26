@@ -173,6 +173,7 @@ export default defineConfig(({ mode }) => {
     test: {
       include: ["src/**/*.spec.ts"],
       environment: "node",
+      setupFiles: ["./vitest.setup.ts"],
     },
   };
 });

@@ -1,14 +1,22 @@
 // The only place browser differences are allowed to live.
 //
 // Both targets are MV3, where every API used here returns a promise when no
-// callback is passed. So this adapter is promise-only on purpose: Firefox's
-// browser.* APIs are schema-validated and reject an unexpected trailing
-// callback argument outright, which would take the API down on Firefox with no
-// fallback. Passing a callback "just in case" is the one shape that cannot
-// work on both. Errors surface as rejections, so runtime.lastError never
-// needs reading.
+// callback is passed, so this adapter is promise-only: one shape, no
+// lastError, errors as rejections. Note that Firefox's browser.* APIs are
+// schema-validated and reject an unexpected trailing callback, while its
+// chrome.* alias still accepts one — so callback-style code does not
+// necessarily break on Firefox, it just cannot use browser.*. Going through
+// here is about having one shape, not about avoiding a crash.
 
-const api: typeof chrome = (globalThis as { browser?: typeof chrome }).browser ?? chrome;
+// Firefox exposes `browser` and aliases `chrome` to it; Chrome exposes only
+// `chrome`. Declared rather than asserted so the union is checked, and read off
+// globalThis because a bare `browser` is a ReferenceError on Chrome.
+declare global {
+  // eslint-disable-next-line no-var
+  var browser: typeof chrome | undefined;
+}
+
+const api: typeof chrome = globalThis.browser ?? chrome;
 
 // Normalises whatever the API rejected with into an Error, and turns a
 // synchronous throw into a rejection so callers only need try/catch or .catch,
@@ -27,7 +35,7 @@ function storageGet<T extends Record<string, unknown>>(
   area: StorageArea,
   keys: string | string[] | null,
 ): Promise<T> {
-  return callApi<T>(() => api.storage[area].get(keys) as Promise<T>);
+  return callApi<T>(() => api.storage[area].get(keys));
 }
 
 function storageSet(area: StorageArea, items: Record<string, unknown>): Promise<void> {
@@ -67,6 +75,10 @@ function getExtensionUrl(path: string): string {
 
 function getManifestVersion(): string {
   return api.runtime.getManifest().version;
+}
+
+function getManifestName(): string {
+  return api.runtime.getManifest().name;
 }
 
 function openOptionsPage(): Promise<void> {
@@ -118,6 +130,7 @@ export {
   createTab,
   injectScript,
   getExtensionUrl,
+  getManifestName,
   getManifestVersion,
   openOptionsPage,
   hasClaudeAccess,

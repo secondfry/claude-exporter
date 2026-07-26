@@ -1,4 +1,5 @@
 import { backupExtensionData, showImportModeModal, importBackup } from '../../features/backup';
+import type { ImportMode } from '../../features/backup';
 import { cacheStats, clearCache } from '../../features/cache';
 import { generateDiagnostics, initErrorCapture } from '../../features/diagnostics';
 import { fetchConversationList } from '../../features/conversation/api';
@@ -93,35 +94,33 @@ document.getElementById('testBtn')?.addEventListener('click', async () => {
 });
 
 // Backup all extension data to a file (shared logic lives in features/backup)
-document.getElementById('backupBtn')?.addEventListener('click', () => {
-  backupExtensionData((success, message) => {
-    showStatus('backupStatus', message, success ? 'success' : 'error');
-  });
+document.getElementById('backupBtn')?.addEventListener('click', async () => {
+  const { success, message } = await backupExtensionData();
+  showStatus('backupStatus', message, success ? 'success' : 'error');
 });
 
 // Restore extension data from a backup file. Flow: click → mode-choice modal
 // → file picker → import. The mode is held in pendingImportMode across the
 // async file-picker boundary.
-let pendingImportMode: 'merge' | 'replace' | null = null;
+let pendingImportMode: ImportMode | null = null;
 
-document.getElementById('restoreBtn')?.addEventListener('click', () => {
-  showImportModeModal((mode) => {
-    if (mode === null) return; // user cancelled the modal
-    pendingImportMode = mode;
-    document.getElementById('restoreFile')?.click();
-  });
+document.getElementById('restoreBtn')?.addEventListener('click', async () => {
+  const mode = await showImportModeModal();
+  if (mode === null) return; // user cancelled the modal
+  pendingImportMode = mode;
+  document.getElementById('restoreFile')?.click();
 });
 
-document.getElementById('restoreFile')?.addEventListener('change', (event) => {
-  const target = event.target as HTMLInputElement;
+document.getElementById('restoreFile')?.addEventListener('change', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
   const file = target.files?.[0];
   target.value = ''; // allow re-selecting the same file later
   const mode = pendingImportMode;
   pendingImportMode = null; // consume; never reuse a stale mode
   if (!file || !mode) return;
-  importBackup(file, mode, (success, message) => {
-    showStatus('backupStatus', message, success ? 'success' : 'error');
-  });
+  const { success, message } = await importBackup(file, mode);
+  showStatus('backupStatus', message, success ? 'success' : 'error');
 });
 
 // Date & Time format preferences (displayed in the browse view)
@@ -177,11 +176,10 @@ document.getElementById('emailDevLink')?.addEventListener('click', (e) => {
   window.location.href = `mailto:agoramachina@gmail.com?subject=${subject}&body=${body}`;
 });
 
-document.getElementById('generateDiagnosticsLink')?.addEventListener('click', (e) => {
+document.getElementById('generateDiagnosticsLink')?.addEventListener('click', async (e) => {
   e.preventDefault();
-  generateDiagnostics((success, message) => {
-    showStatus('contactStatus', message, success ? 'success' : 'error');
-  });
+  const { success, message } = await generateDiagnostics();
+  showStatus('contactStatus', message, success ? 'success' : 'error');
 });
 
 // Chat Cache

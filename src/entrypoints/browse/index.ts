@@ -34,6 +34,7 @@ import {
 import type { ExportRecords, ModelSnapshots } from '../../features/tracking';
 import { formatModelName, getModelBadgeClass, inferModel } from '../../features/models';
 import { backupExtensionData, importBackup, showImportModeModal } from '../../features/backup';
+import type { ImportMode } from '../../features/backup';
 import { initErrorCapture } from '../../features/diagnostics';
 
 // ---------------------------------------------------------------------------
@@ -1005,33 +1006,34 @@ function setupEventListeners(): void {
   });
 
   // Backup / Restore Database submenu — shared logic lives in features/backup
-  req('backupData').addEventListener('click', () => {
-    backupExtensionData((success, message) => showToast(message, !success));
+  req('backupData').addEventListener('click', async () => {
     settingsDropdown.classList.remove('open');
+    const { success, message } = await backupExtensionData();
+    showToast(message, !success);
   });
 
   // Import flow: mode-choice modal → file picker → import.
   // pendingImportMode bridges the async file-picker boundary.
-  let pendingImportMode: 'merge' | 'replace' | null = null;
+  let pendingImportMode: ImportMode | null = null;
 
   const restoreFileBrowse = req<HTMLInputElement>('restoreFileBrowse');
 
-  req('restoreData').addEventListener('click', () => {
+  req('restoreData').addEventListener('click', async () => {
     settingsDropdown.classList.remove('open');
-    showImportModeModal((mode) => {
-      if (mode === null) return; // user cancelled
-      pendingImportMode = mode;
-      restoreFileBrowse.click();
-    });
+    const mode = await showImportModeModal();
+    if (mode === null) return; // user cancelled
+    pendingImportMode = mode;
+    restoreFileBrowse.click();
   });
 
-  restoreFileBrowse.addEventListener('change', () => {
+  restoreFileBrowse.addEventListener('change', async () => {
     const file = restoreFileBrowse.files?.[0];
     restoreFileBrowse.value = ''; // allow re-selecting the same file later
     const mode = pendingImportMode;
     pendingImportMode = null; // consume; never reuse a stale mode
     if (!file || !mode) return;
-    importBackup(file, mode, (success, message) => showToast(message, !success));
+    const { success, message } = await importBackup(file, mode);
+    showToast(message, !success);
   });
 
   // Search input
