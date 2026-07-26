@@ -7,7 +7,7 @@
 // of the same conversations. Since the ADR-0002 sizing argument is the whole
 // reason the cache is not in chrome.storage.local, storing it twice is not an
 // acceptable outcome — the content script goes through the background worker
-// instead. See docs/adr/0003.
+// instead. See docs/adr/0003-chat-cache-lives-on-the-extension-origin.md.
 
 import type { Conversation } from '../conversation/types';
 

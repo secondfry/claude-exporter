@@ -1,4 +1,5 @@
 import { backupExtensionData, showImportModeModal, importBackup } from '../../features/backup';
+import { cacheStats, clearCache } from '../../features/cache';
 import { generateDiagnostics, initErrorCapture } from '../../features/diagnostics';
 import { fetchConversationList } from '../../features/conversation/api';
 import { storageGet, storageSet, getManifestVersion, hasClaudeAccess, requestClaudeAccess } from '../../platform';
@@ -181,6 +182,54 @@ document.getElementById('generateDiagnosticsLink')?.addEventListener('click', (e
   generateDiagnostics((success, message) => {
     showStatus('contactStatus', message, success ? 'success' : 'error');
   });
+});
+
+// Chat Cache
+//
+// The options page is extension-origin, the same as the background worker, so
+// it reads the cache directly rather than relaying through it.
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+async function refreshCacheStats(): Promise<void> {
+  const el = document.getElementById('cacheStats');
+  if (!el) return;
+
+  try {
+    const stats = await cacheStats();
+    const parts = [`${stats.entries} conversation${stats.entries === 1 ? '' : 's'} cached`];
+    // Origin-wide, so it covers settings and export history too. Saying so
+    // beats reporting a number that will not match the entry count.
+    if (stats.usageBytes !== null) {
+      parts.push(`${formatBytes(stats.usageBytes)} of local storage used in total`);
+    }
+    if (stats.quotaExceeded) {
+      parts.push('storage is full — new conversations are not being cached');
+    }
+    el.textContent = parts.join(' · ');
+  } catch {
+    el.textContent = 'Cache unavailable.';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  void refreshCacheStats();
+});
+
+document.getElementById('clearCacheBtn')?.addEventListener('click', () => {
+  hideStatus('cacheStatus');
+  clearCache()
+    .then(async () => {
+      await refreshCacheStats();
+      showStatus('cacheStatus', 'Chat Cache cleared. The next export will refetch.', 'success');
+    })
+    .catch((error: unknown) => {
+      showStatus('cacheStatus', `Could not clear the cache: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    });
 });
 
 export {};

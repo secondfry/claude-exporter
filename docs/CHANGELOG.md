@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.12.0]
+
+**Chat Cache.** Conversations already downloaded are kept locally, so re-exporting the same chats skips the network entirely. This is what the 1.11.0 restructure was groundwork for. See ADR-0002 and ADR-0003.
+
+- Raw API JSON is stored in IndexedDB keyed by conversation UUID. Because it is the raw response rather than rendered output, one entry serves every combination of export options — switching format, toggling artifacts or metadata no longer costs a refetch.
+- A cached copy is used only when its `updated_at` exactly matches what the conversation list reports, and only when it was fetched under the current request shape. Any doubt is resolved by refetching: the cache can produce a miss, never a stale export.
+- Entries are written immediately after each fetch, before conversion. Cancelling a large export now keeps everything it had already downloaded, instead of discarding all of it.
+- The batch delay is skipped for batches served entirely from the cache, so a fully warm re-export runs at local speed.
+- Options page gains a Chat Cache section showing how many conversations are cached, with a Clear Cache button. Clearing loses nothing but speed.
+- The cache is not included in Backup, which stays a small settings-and-export-history file.
+- If local storage fills up, caching stops and the export still completes and downloads normally — the browse page says so after reporting success.
+
+**Notes**
+
+- The popup's single-conversation export always refetches: it exports whatever chat is on screen without loading the conversation list, so it has no `updated_at` to check a cached copy against. It still populates the cache for later runs.
+- The content script relays cache access through the background worker, because IndexedDB is partitioned by origin and a claude.ai-origin cache would be a second full copy of everything. See ADR-0003.
+- Test suite grew from 134 to 158 tests.
+
 ## [1.11.0]
 
 Structural release. No new user-facing features; the parts that changed behaviour are listed under "Behaviour changes" below.

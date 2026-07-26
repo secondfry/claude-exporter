@@ -248,6 +248,14 @@
   </div>
 
   <div class="section">
+    <h3>Chat Cache</h3>
+    <p>Conversations already downloaded are kept locally, so exporting the same chats again skips the network entirely. A cached copy is used only while Claude.ai still reports the same last-updated time — edit or continue a chat and it is fetched fresh. Clearing it loses nothing but speed. It is not included in Backup.</p>
+    <div id="cacheStats">Checking&hellip;</div>
+    <button id="clearCacheBtn" style="margin-top: 10px;">Clear Cache</button>
+    <div id="cacheStatus" class="status"></div>
+  </div>
+
+  <div class="section">
     <h3>Date &amp; Time Format</h3>
     <p>How dates and times are displayed in the browse view.</p>
     <div class="date-time-grid">

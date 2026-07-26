@@ -68,6 +68,12 @@ layer, or the browser targets — the rejected alternatives are the useful part.
 - All claude.ai HTTP lives in `features/conversation/api.ts`. `CONVERSATION_QUERY`
   must keep exactly one definition — ADR-0002 ties the Chat Cache's
   `requestSignature` to that exact string.
+- The Chat Cache lives on the **extension origin only**. IndexedDB is partitioned by
+  origin, so the content script (claude.ai) relays through background rather than
+  opening its own — a second cache would duplicate hundreds of MB. ADR-0003.
+- A cache hit needs an `updated_at` the caller got from the conversation list. Never
+  loosen that to `>=`: it is the only variant that can serve a conversation missing
+  its newest messages while reporting success.
 - Firefox MV3 host permissions are optional and user-revocable, so the extension can
   be installed yet unable to reach claude.ai. Detect and request; never fail silently.
   Chrome always reports granted.

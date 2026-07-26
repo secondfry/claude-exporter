@@ -842,7 +842,14 @@ async function exportAllFiltered(): Promise<void> {
     } else if (failed > 0) {
       showToast(`Exported ${completed} of ${targets.length} conversations (${failed} failed).`);
     } else {
-      showToast(`Successfully exported all ${completed} conversations!`);
+      const cached = result.fromCache > 0 ? ` (${result.fromCache} from cache)` : '';
+      showToast(`Successfully exported all ${completed} conversations!${cached}`);
+    }
+
+    // Worth saying because the next export will be slow again, but only after
+    // the success message: the file the user asked for is unaffected.
+    if (result.cacheQuotaExceeded) {
+      showToast('Local storage is full, so conversations are no longer being cached.', true);
     }
 
     await refreshExportRecords();

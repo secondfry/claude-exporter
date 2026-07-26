@@ -4,18 +4,28 @@
 
 ### Critical Priority 🔴
 
-- **Manual smoke test of v1.11.0 in both browsers** — the restructure is verified by
-  typecheck, 134 unit tests and a build-output audit, but nothing has actually been
-  loaded into a browser yet. Load `dist/chrome/` unpacked and `dist/firefox/` temporary,
-  then check: popup Export Current + Export All, browse page load / filter / select /
-  Export Selected, cancel mid-export, options save + Test Connection, backup export and
-  re-import, and Firefox's permission prompt after revoking host access in `about:addons`.
+- **Manual smoke test of v1.12.0 in both browsers** — the restructure and the Chat
+  Cache are verified by typecheck, 158 unit tests and a build-output audit, but
+  nothing has actually been loaded into a browser yet. Load `dist/chrome/` unpacked
+  and `dist/firefox/` temporary, then check: popup Export Current + Export All,
+  browse page load / filter / select / Export Selected, cancel mid-export, options
+  save + Test Connection, backup export and re-import, and Firefox's permission
+  prompt after revoking host access in `about:addons`.
 
-- **Chat Cache (ADR-0002)** — the feature this restructure was groundwork for. Raw
-  conversation JSON in IndexedDB keyed by UUID, hit requires exact `updated_at` match
-  *and* matching `requestSignature`, written immediately after each successful fetch,
-  never migrated, excluded from Backup. `features/cache/` does not exist yet;
-  `CONVERSATION_QUERY` in `features/conversation/api.ts` is the signature source.
+  Cache-specific: export a set of chats twice and confirm the second run reports
+  "(N from cache)" and finishes without network requests (DevTools Network on the
+  browse page); continue one chat on claude.ai and confirm only that one refetches;
+  Clear Cache in Options drops the count to 0; and the popup's Export All shares the
+  same cache as the browse page rather than building its own (Application →
+  IndexedDB should show `claude-exporter-chat-cache` only under the extension
+  origin, never under claude.ai).
+
+- **Orphans** — conversations in the cache that no longer exist upstream, for which
+  the cache is the only remaining copy (ADR-0002 consequence). Nothing surfaces them
+  today: the browse table is built from the conversation list, so a deleted chat
+  simply vanishes even though its content is still on disk. Needs a way to list and
+  export them, and a decision on whether Clear Cache should warn when it would
+  destroy the last copy of something.
 
 ### High Priority 🟠
 
