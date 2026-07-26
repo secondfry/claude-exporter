@@ -10,8 +10,8 @@
 import { remoteCache } from '../../features/cache';
 import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
 import { initErrorCapture } from '../../features/diagnostics';
-import { exportConversations } from '../../features/export';
-import type { ExportOptions, ExportResult, ExportTarget } from '../../features/export';
+import { exportConversations } from '../../features/export/pipeline';
+import type { ExportOptions, ExportResult, ExportTarget } from '../../features/export/types';
 import { recordModelSnapshots } from '../../features/tracking';
 import { onMessage } from '../../platform';
 

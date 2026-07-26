@@ -14,7 +14,7 @@
 
 import type { ConversationSummary } from '../../features/conversation/types';
 import type { Project } from '../../features/conversation/api';
-import type { ExportOptions } from '../../features/export';
+import type { ExportOptions } from '../../features/export/types';
 
 /** Export options as they appear on the wire: flat, and all optional. */
 type ExportOptionsMessage = Partial<ExportOptions>;

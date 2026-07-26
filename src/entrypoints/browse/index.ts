@@ -21,8 +21,8 @@ import type {
   ExportFormat,
 } from '../../features/conversation/types';
 import { localCache } from '../../features/cache';
-import { exportConversations } from '../../features/export';
-import type { ExportOptions, ExportProgress, ExportTarget } from '../../features/export';
+import { exportConversations } from '../../features/export/pipeline';
+import type { ExportOptions, ExportProgress, ExportTarget } from '../../features/export/types';
 import {
   recordModelSnapshots,
   loadExportRecords,
