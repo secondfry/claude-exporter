@@ -76,7 +76,8 @@ The repo root *is* the extension project — there is no wrapper directory.
 - Not: `wip`, `fix stuff`, `update`, `final FINAL (1)`
 - Group related changes into one commit
 - Don't push unless asked
-- **Branching**: `master` is the only long-lived branch. There is no `testing` branch and no `main` branch — both were removed. Work directly on `master` unless a change is big enough to warrant a short-lived feature branch
+- **Branching**: `master` is the only long-lived branch. There is no `testing` branch and no `main` branch — both were removed. Short-lived feature branches and git worktrees are fine for anything substantial
+- **Never create a merge commit.** Integrate with `git rebase` only; squashing is optional and up to the author. The repo sets `merge.ff = only` and `pull.rebase = true` locally so an accidental merge fails loudly rather than landing quietly. If a rebase conflicts, resolve it — do not fall back to `git merge`
 
 ### Preserving history across moves
 
