@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.23.0]
+
+**Orphans are visible and exportable.** A conversation deleted from claude.ai left its cached content on disk with nothing pointing at it — the browse table is built from the conversation list, so the row simply disappeared. This is the one place ADR-0002's "the cache is disposable" stops holding: for an Orphan, the cached copy is the only one there is.
+
+They now appear as ordinary rows, badged, under a "Deleted from claude.ai" filter. Everything about the row stays usable except the name link, which would be a guaranteed 404. They export through the existing pipeline unchanged: the summary carries the record's own `updatedAt`, which is exactly what `isFresh` compares, so the cache answers and the fetch never happens.
+
+Clear Cache now asks first when it would destroy Orphans — and asks when it _cannot tell_. Unknown is treated as "there might be", never as zero, because every route to not knowing (offline, signed out, Firefox host access revoked) is a condition where the user is least able to recover from being wrong. A cache with no Orphans still clears silently; prompting there would train the user to dismiss the prompt that matters.
+
+No cache schema change, deliberately. Storing a summary per record would have made enumeration cheaper, but a `DB_VERSION` bump drops the store, and the store holds the only copy of every Orphan the feature exists to rescue. `getAllKeys` reads the uuids without touching the values, and full records load only for the few that turn out to be Orphans.
+
 ## [1.22.4]
 
 **Six regressions the refactor's own tests agreed with.** An adversarial review of v1.22.1–v1.22.3 found behaviour changes that 522 green tests missed, because the pass that introduced them also wrote the tests. Each fix ships with a test verified to fail against the previous commit — a test written after a refactor describes the refactor, not the requirement, unless you check it fails on the old code.

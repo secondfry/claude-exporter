@@ -4,12 +4,7 @@
 
 ### Critical Priority 🔴
 
-- **Orphans** — conversations in the cache that no longer exist upstream, for which
-  the cache is the only remaining copy (ADR-0002 consequence). Nothing surfaces them
-  today: the browse table is built from the conversation list, so a deleted chat
-  simply vanishes even though its content is still on disk. Needs a way to list and
-  export them, and a decision on whether Clear Cache should warn when it would
-  destroy the last copy of something.
+(none currently open)
 
 ### High Priority 🟠
 
@@ -274,6 +269,27 @@
   conversation vanishes from both `pending` and `stale`).
 
 ## Completed ✅
+
+- **Orphans — listed, exportable, and protected from Clear Cache** (v1.23.0)
+  - Detection is a set difference between the cached uuids and the conversation
+    list, not a probe per uuid. `getAllKeys` reads keys only; full records load
+    for the handful that survive the diff, because the values are hundreds of
+    megabytes and the question is about which uuids exist
+  - No cache schema change, on purpose: a stored per-record summary would have
+    made enumeration cheaper, but a `DB_VERSION` bump drops the store and the
+    store is the only copy of every Orphan (ADR-0002). Left as a note for anyone
+    tempted later — the cheaper design destroys what the feature exists to save
+  - An empty conversation list yields no Orphans rather than all of them: it is
+    indistinguishable from a failed fetch, and the wrong reading reports the
+    whole cache as unrecoverable next to a button offering to delete it
+  - Clear Cache prompts when Orphans exist **and** when the count cannot be
+    established. Zero is the only silent path
+  - Orphans export through the pipeline unchanged — their summary carries the
+    record's own `updatedAt`, the field `isFresh` compares
+  - Still open, deliberately: nothing ever deletes an Orphan individually, and
+    the cache has no eviction. An account that deletes chats regularly
+    accumulates them until Clear Cache, which is now a prompt rather than a
+    silent loss but still all-or-nothing
 
 - **Return-early / SRP pass over the whole tree** (v1.22.1–v1.22.4)
   - Rules applied: guard clauses over `if (x) { entire body }`, no more than two
