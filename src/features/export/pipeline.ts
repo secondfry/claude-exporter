@@ -7,6 +7,7 @@
 
 import JSZip from 'jszip';
 
+import type { ArtifactFile } from '$features/artifacts';
 import { extractArtifactFiles } from '$features/artifacts';
 import { fetchConversation } from '$features/conversation/api';
 import type { Conversation } from '$features/conversation/types';
@@ -85,13 +86,94 @@ const renderConversation = (
 };
 
 /**
- * Lay one fetched conversation out as ZIP-relative paths.
+ * Everything the three layout builders need, computed once.
  *
  * `nest` distinguishes the two nested layouts: a bulk export puts each
  * conversation in its own `<name>/` folder, a single-conversation export
  * writes at the root. The flat layout (`Chats/` + `Artifacts/`) is identical
  * either way.
  */
+interface Layout {
+  artifactFiles: ArtifactFile[];
+  chatContent: string | null;
+  chatFilename: string;
+  nest: boolean;
+  safeName: string;
+}
+
+/** `Chats/` + `Artifacts/`, one pair of folders for the whole export. */
+const flatEntries = ({
+  artifactFiles,
+  chatContent,
+  chatFilename,
+  safeName,
+}: Layout): ExportEntry[] => {
+  const chat =
+    chatContent === null
+      ? []
+      : [{ content: chatContent, isChat: true, path: `Chats/${chatFilename}` }];
+  return chat.concat(
+    artifactFiles.map((artifact) => ({
+      content: artifact.content,
+      isChat: false,
+      path: `Artifacts/${safeName}_${artifact.filename}`,
+    })),
+  );
+};
+
+/** Transcript beside its own artifacts, optionally inside a per-chat folder. */
+const nestedEntries = ({
+  artifactFiles,
+  chatContent,
+  chatFilename,
+  nest,
+  safeName,
+}: Layout): ExportEntry[] => {
+  const base = nest ? `${safeName}/` : '';
+  const chat =
+    chatContent === null
+      ? []
+      : [
+          {
+            content: chatContent,
+            isChat: true,
+            path: `${base}${chatFilename}`,
+          },
+        ];
+  // Artifacts only get their own subfolder when there's a transcript to sit
+  // beside; otherwise they'd be alone inside a pointless directory.
+  const artifactBase = chatContent === null ? base : `${base}artifacts/`;
+  return chat.concat(
+    artifactFiles.map((artifact) => ({
+      content: artifact.content,
+      isChat: false,
+      path: `${artifactBase}${artifact.filename}`,
+    })),
+  );
+};
+
+/** Transcripts only, at the root. */
+const chatOnlyEntries = ({
+  chatContent,
+  chatFilename,
+}: Layout): ExportEntry[] => {
+  if (chatContent === null) return [];
+  return [{ content: chatContent, isChat: true, path: chatFilename }];
+};
+
+const artifactsFor = (
+  data: Conversation,
+  options: ExportOptions,
+): ArtifactFile[] => {
+  const wanted =
+    options.extractArtifacts ||
+    options.flattenArtifacts ||
+    !options.includeChats;
+  if (!wanted) return [];
+  return extractArtifactFiles(data, options.artifactFormat);
+};
+
+/** Lay one fetched conversation out as ZIP-relative paths. */
 const buildEntries = (
   target: ExportTarget,
   data: Conversation,
@@ -101,69 +183,27 @@ const buildEntries = (
   // The fetched conversation's own name wins: the popup cannot cheaply know the
   // title so it sends none, and the browse page's list may be stale.
   const displayName = data.name || target.name || target.uuid;
-  const safeName = sanitizeFilename(displayName);
-  const chatFilename = conversationFilename(displayName, options.format);
-
-  const artifactFiles =
-    options.extractArtifacts ||
-    options.flattenArtifacts ||
-    !options.includeChats
-      ? extractArtifactFiles(data, options.artifactFormat)
-      : [];
+  const artifactFiles = artifactsFor(data, options);
 
   // Chats off and nothing extractable here: this conversation contributes
   // nothing rather than an empty folder.
   if (!options.includeChats && artifactFiles.length === 0) return [];
 
-  const entries: ExportEntry[] = [];
-  const chatContent = options.includeChats
-    ? renderConversation(data, target.uuid, options)
-    : null;
+  const layout: Layout = {
+    artifactFiles,
+    chatContent: options.includeChats
+      ? renderConversation(data, target.uuid, options)
+      : null,
+    chatFilename: conversationFilename(displayName, options.format),
+    nest,
+    safeName: sanitizeFilename(displayName),
+  };
 
   if (options.flattenArtifacts && !options.extractArtifacts) {
-    if (chatContent !== null) {
-      entries.push({
-        content: chatContent,
-        isChat: true,
-        path: `Chats/${chatFilename}`,
-      });
-    }
-    for (const artifact of artifactFiles) {
-      entries.push({
-        content: artifact.content,
-        isChat: false,
-        path: `Artifacts/${safeName}_${artifact.filename}`,
-      });
-    }
-    return entries;
+    return flatEntries(layout);
   }
-
-  if (options.extractArtifacts) {
-    const base = nest ? `${safeName}/` : '';
-    if (chatContent !== null) {
-      entries.push({
-        content: chatContent,
-        isChat: true,
-        path: `${base}${chatFilename}`,
-      });
-    }
-    // Artifacts only get their own subfolder when there's a transcript to sit
-    // beside; otherwise they'd be alone inside a pointless directory.
-    const artifactBase = chatContent !== null ? `${base}artifacts/` : base;
-    for (const artifact of artifactFiles) {
-      entries.push({
-        content: artifact.content,
-        isChat: false,
-        path: `${artifactBase}${artifact.filename}`,
-      });
-    }
-    return entries;
-  }
-
-  if (chatContent !== null) {
-    entries.push({ content: chatContent, isChat: true, path: chatFilename });
-  }
-  return entries;
+  if (options.extractArtifacts) return nestedEntries(layout);
+  return chatOnlyEntries(layout);
 };
 
 const downloadBlob = (blob: Blob, filename: string): void => {
@@ -177,6 +217,32 @@ const downloadBlob = (blob: Blob, filename: string): void => {
   URL.revokeObjectURL(url);
 };
 
+const isConversation = (value: unknown): value is Conversation => {
+  if (typeof value !== 'object' || value === null) return false;
+  return Array.isArray(Reflect.get(value, 'chat_messages'));
+};
+
+/** Fetch one conversation over the network, rejecting anything unusable. */
+const fetchValidConversation = async (
+  orgId: string,
+  target: ExportTarget,
+  signal: AbortSignal | undefined,
+): Promise<Conversation> => {
+  const data = await fetchConversation(orgId, target.uuid, signal);
+  if (!isConversation(data)) {
+    throw new Error(
+      'Invalid conversation data structure. Please refresh the page and try again.',
+    );
+  }
+  return data;
+};
+
+interface LoadedConversation {
+  cached: boolean;
+  data: Conversation;
+  quota: boolean;
+}
+
 /**
  * Obtain one conversation, preferring the Chat Cache.
  *
@@ -189,21 +255,105 @@ const loadConversation = async (
   orgId: string,
   target: ExportTarget,
   hooks: ExportHooks | undefined,
-): Promise<{ cached: boolean; data: Conversation; quota: boolean }> => {
+): Promise<LoadedConversation> => {
   const cache = hooks?.cache;
 
   const hit = cache ? await cache.read(target.uuid, target.updatedAt) : null;
   if (hit) return { cached: true, data: hit, quota: false };
 
-  const data = await fetchConversation(orgId, target.uuid, hooks?.signal);
-  if (!data || !Array.isArray(data.chat_messages)) {
-    throw new Error(
-      'Invalid conversation data structure. Please refresh the page and try again.',
-    );
-  }
+  const data = await fetchValidConversation(orgId, target, hooks?.signal);
 
   const status = cache ? await cache.write(data) : 'unavailable';
   return { cached: false, data, quota: status === 'quota' };
+};
+
+/**
+ * What one target turned into. Collecting these and reducing once at the end
+ * is what keeps the batch loop free of shared mutable counters — the shape
+ * that used to make partial-failure accounting hard to follow.
+ */
+interface TargetSucceeded {
+  cached: boolean;
+  entries: ExportEntry[];
+  ok: true;
+  quota: boolean;
+  resolvedName: string;
+  uuid: string;
+}
+
+interface TargetFailed {
+  error: unknown;
+  failedName: string;
+  ok: false;
+}
+
+type TargetOutcome = TargetFailed | TargetSucceeded;
+
+const succeeded = (outcome: TargetOutcome): outcome is TargetSucceeded => {
+  return outcome.ok;
+};
+
+const failed = (outcome: TargetOutcome): outcome is TargetFailed => {
+  return !outcome.ok;
+};
+
+/** Never rejects: a failure is a value, so one bad target cannot sink a batch. */
+const runTarget = async (
+  orgId: string,
+  target: ExportTarget,
+  options: ExportOptions,
+  hooks: ExportHooks | undefined,
+  nest: boolean,
+): Promise<TargetOutcome> => {
+  try {
+    const { cached, data, quota } = await loadConversation(
+      orgId,
+      target,
+      hooks,
+    );
+    data.model = inferModel(data);
+    return {
+      cached,
+      entries: buildEntries(target, data, options, nest),
+      ok: true,
+      quota,
+      resolvedName: data.name || target.name || target.uuid,
+      uuid: target.uuid,
+    };
+  } catch (error) {
+    return { error, failedName: target.name || target.uuid, ok: false };
+  }
+};
+
+/**
+ * The delay exists to keep claude.ai from rate-limiting us. A batch served
+ * entirely from the cache asked claude.ai for nothing, so pausing after it
+ * would only make a fully-cached re-export slower than it needs to be.
+ */
+const pauseBetweenBatches = async (
+  batch: TargetOutcome[],
+  more: boolean,
+  signal: AbortSignal | undefined,
+): Promise<void> => {
+  if (!more) return;
+  if (!batch.some((outcome) => succeeded(outcome) && !outcome.cached)) return;
+  throwIfAborted(signal);
+  await delay(INTER_BATCH_DELAY_MS);
+};
+
+const reportFetchProgress = (
+  outcomes: TargetOutcome[],
+  total: number,
+  hooks: ExportHooks | undefined,
+): void => {
+  const done = outcomes.filter(succeeded);
+  hooks?.onProgress?.({
+    completed: done.length,
+    failed: outcomes.length - done.length,
+    fromCache: done.filter((outcome) => outcome.cached).length,
+    phase: 'fetching',
+    total,
+  });
 };
 
 interface FetchOutcome {
@@ -223,6 +373,30 @@ interface FetchOutcome {
   succeededIds: string[];
 }
 
+/**
+ * Reduce the per-target outcomes to the whole run's answer.
+ *
+ * `outcomes` are already in the caller's order — batches run in sequence and
+ * `Promise.all` preserves input order — so ZIP contents are deterministic for a
+ * given selection rather than depending on which fetch finished first.
+ */
+const summarise = (outcomes: TargetOutcome[]): FetchOutcome => {
+  const done = outcomes.filter(succeeded);
+  const contributing = done.filter((outcome) => outcome.entries.length > 0);
+
+  return {
+    cacheHits: done.filter((outcome) => outcome.cached).length,
+    cacheQuotaExceeded: done.some((outcome) => outcome.quota),
+    entries: contributing.flatMap((outcome) => outcome.entries),
+    failedNames: outcomes.filter(failed).map((outcome) => outcome.failedName),
+    firstError: outcomes.filter(failed)[0]?.error,
+    resolvedNames: new Map(
+      done.map((outcome) => [outcome.uuid, outcome.resolvedName]),
+    ),
+    succeededIds: contributing.map((outcome) => outcome.uuid),
+  };
+};
+
 const fetchAll = async (
   orgId: string,
   targets: ExportTarget[],
@@ -231,83 +405,23 @@ const fetchAll = async (
   nest: boolean,
 ): Promise<FetchOutcome> => {
   const total = targets.length;
-  const collected = new Map<string, ExportEntry[]>();
-  const failedNames: string[] = [];
-  const resolvedNames = new Map<string, string>();
-  let firstError: unknown = undefined;
-  let completed = 0;
-  let cacheHits = 0;
-  let cacheQuotaExceeded = false;
+  const outcomes: TargetOutcome[] = [];
 
   for (let i = 0; i < total; i += BATCH_SIZE) {
     throwIfAborted(hooks?.signal);
 
-    const batch = targets.slice(i, i + BATCH_SIZE);
-    let hitNetwork = false;
-
-    await Promise.all(
-      batch.map(async (target) => {
-        try {
-          const { cached, data, quota } = await loadConversation(
-            orgId,
-            target,
-            hooks,
-          );
-          if (cached) cacheHits++;
-          else hitNetwork = true;
-          if (quota) cacheQuotaExceeded = true;
-
-          data.model = inferModel(data);
-          collected.set(target.uuid, buildEntries(target, data, options, nest));
-          resolvedNames.set(
-            target.uuid,
-            data.name || target.name || target.uuid,
-          );
-          completed++;
-        } catch (error) {
-          if (firstError === undefined) firstError = error;
-          failedNames.push(target.name || target.uuid);
-        }
-      }),
+    const batch = await Promise.all(
+      targets
+        .slice(i, i + BATCH_SIZE)
+        .map((target) => runTarget(orgId, target, options, hooks, nest)),
     );
+    outcomes.push(...batch);
 
-    hooks?.onProgress?.({
-      completed,
-      failed: failedNames.length,
-      fromCache: cacheHits,
-      phase: 'fetching',
-      total,
-    });
-
-    // The delay exists to keep claude.ai from rate-limiting us. A batch served
-    // entirely from the cache asked claude.ai for nothing, so pausing after it
-    // would only make a fully-cached re-export slower than it needs to be.
-    if (hitNetwork && i + BATCH_SIZE < total) {
-      throwIfAborted(hooks?.signal);
-      await delay(INTER_BATCH_DELAY_MS);
-    }
+    reportFetchProgress(outcomes, total, hooks);
+    await pauseBetweenBatches(batch, i + BATCH_SIZE < total, hooks?.signal);
   }
 
-  // Preserve the caller's ordering rather than completion order, so ZIP
-  // contents are deterministic for a given selection.
-  const entries: ExportEntry[] = [];
-  const succeededIds: string[] = [];
-  for (const target of targets) {
-    const found = collected.get(target.uuid);
-    if (!found || found.length === 0) continue;
-    entries.push(...found);
-    succeededIds.push(target.uuid);
-  }
-
-  return {
-    cacheHits,
-    cacheQuotaExceeded,
-    entries,
-    failedNames,
-    firstError,
-    resolvedNames,
-    succeededIds,
-  };
+  return summarise(outcomes);
 };
 
 interface FinishArgs {
@@ -319,6 +433,27 @@ interface FinishArgs {
   filename: string;
   succeededIds: string[];
 }
+
+/**
+ * Write the Export Records, reporting whether it worked instead of throwing.
+ *
+ * The user already has the file by the time this runs, so a storage failure is
+ * information, not a reason to fail the export.
+ */
+const writeRecords = async (succeededIds: string[]): Promise<boolean> => {
+  if (succeededIds.length === 0) return true;
+  try {
+    await recordExports(succeededIds);
+    return true;
+  } catch (error) {
+    console.warn(
+      new Error('Failed to write Export Records for a successful export', {
+        cause: error,
+      }),
+    );
+    return false;
+  }
+};
 
 /**
  * Download the file and write its Export Records, then build the result.
@@ -342,19 +477,6 @@ const finish = async ({
 }: FinishArgs): Promise<ExportResult> => {
   downloadBlob(blob, filename);
 
-  let recordsWritten = true;
-  if (succeededIds.length > 0) {
-    try {
-      await recordExports(succeededIds);
-    } catch (error) {
-      recordsWritten = false;
-      console.warn(
-        'Failed to write Export Records for a successful export:',
-        error,
-      );
-    }
-  }
-
   return {
     artifactCount,
     cacheQuotaExceeded,
@@ -362,8 +484,54 @@ const finish = async ({
     failedNames,
     filename,
     fromCache: cacheHits,
-    recordsWritten,
+    recordsWritten: await writeRecords(succeededIds),
   };
+};
+
+const asError = (value: unknown): Error => {
+  if (value instanceof Error) return value;
+  return new Error(String(value));
+};
+
+/** The one-entry case: the file itself, no ZIP wrapper (CLAUDE.md). */
+const asLoneFile = (entry: ExportEntry): { blob: Blob; filename: string } => {
+  const filename = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+  return {
+    blob: new Blob([entry.content], { type: mimeForFilename(filename) }),
+    filename,
+  };
+};
+
+const zipEntries = async (
+  entries: ExportEntry[],
+  failed: number,
+  hooks: ExportHooks | undefined,
+): Promise<Blob> => {
+  const zip = new JSZip();
+  for (const entry of entries) {
+    zip.file(entry.path, entry.content);
+  }
+
+  return zip.generateAsync(ZIP_OPTIONS, (metadata) => {
+    hooks?.onProgress?.({
+      completed: Math.round(metadata.percent),
+      failed,
+      phase: 'zipping',
+      total: 100,
+    });
+  });
+};
+
+const zipFilename = (
+  targets: ExportTarget[],
+  options: ExportOptions,
+  resolvedNames: Map<string, string>,
+  single: boolean,
+): string => {
+  if (!single) return bulkZipFilename(options);
+  const first = targets[0];
+  const name = resolvedNames.get(first.uuid) || first.name || first.uuid;
+  return `${sanitizeFilename(name)}.zip`;
 };
 
 /**
@@ -383,76 +551,40 @@ const exportConversations = async (
   }
 
   const single = targets.length === 1;
-  const {
-    cacheHits,
-    cacheQuotaExceeded,
-    entries,
-    failedNames,
-    firstError,
-    resolvedNames,
-    succeededIds,
-  } = await fetchAll(orgId, targets, options, hooks, !single);
+  const fetched = await fetchAll(orgId, targets, options, hooks, !single);
+  const { entries, failedNames } = fetched;
 
   // A single-conversation export has no partial success to report, so a failed
   // fetch is the whole operation failing.
-  if (single && failedNames.length > 0) {
-    throw firstError instanceof Error
-      ? firstError
-      : new Error(String(firstError));
-  }
+  if (single && failedNames.length > 0) throw asError(fetched.firstError);
 
   if (entries.length === 0) {
     throw new Error('Nothing to export. Enable "Chats" or "Artifacts nested".');
   }
 
-  const artifactCount = entries.filter((entry) => !entry.isChat).length;
+  const common = {
+    artifactCount: entries.filter((entry) => !entry.isChat).length,
+    cacheHits: fetched.cacheHits,
+    cacheQuotaExceeded: fetched.cacheQuotaExceeded,
+    failedNames,
+    succeededIds: fetched.succeededIds,
+  };
 
   if (single && entries.length === 1) {
-    const entry = entries[0];
-    const filename = entry.path.slice(entry.path.lastIndexOf('/') + 1);
-    return finish({
-      artifactCount,
-      blob: new Blob([entry.content], { type: mimeForFilename(filename) }),
-      cacheHits,
-      cacheQuotaExceeded,
-      failedNames,
-      filename,
-      succeededIds,
-    });
+    return finish({ ...common, ...asLoneFile(entries[0]) });
   }
 
-  const zip = new JSZip();
-  for (const entry of entries) {
-    zip.file(entry.path, entry.content);
-  }
-
-  const blob = await zip.generateAsync(ZIP_OPTIONS, (metadata) => {
-    hooks?.onProgress?.({
-      completed: Math.round(metadata.percent),
-      failed: failedNames.length,
-      phase: 'zipping',
-      total: 100,
-    });
-  });
+  const blob = await zipEntries(entries, failedNames.length, hooks);
 
   // Cancelling during compression must not still hand the user a file. Same
   // AbortError contract the fetch loop uses; browse's isAbort() suppresses the
   // failure toast because the cancel button already showed its own.
   throwIfAborted(hooks?.signal);
 
-  const first = targets[0];
-  const filename = single
-    ? `${sanitizeFilename(resolvedNames.get(first.uuid) || first.name || first.uuid)}.zip`
-    : bulkZipFilename(options);
-
   return finish({
-    artifactCount,
+    ...common,
     blob,
-    cacheHits,
-    cacheQuotaExceeded,
-    failedNames,
-    filename,
-    succeededIds,
+    filename: zipFilename(targets, options, fetched.resolvedNames, single),
   });
 };
 

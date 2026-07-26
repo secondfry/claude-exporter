@@ -5,6 +5,7 @@ import type { ChatMessage, Conversation } from '$features/conversation/types';
 import {
   extractArtifactFiles,
   extractArtifactsFromMessage,
+  extractArtifactsFromText,
   getFileExtension,
   isProgrammingLanguage,
 } from './index';
@@ -254,6 +255,181 @@ describe('extractArtifactFiles — end-to-end', () => {
     expect(files).toHaveLength(2);
     const names = files.map((f) => f.filename);
     expect(new Set(names).size).toBe(2); // both unique
+  });
+
+  // Characterization: the exact suffixing scheme is `_N` inserted before the
+  // extension, N starting at 1, first writer keeps the bare name.
+  it('suffixes with _N before the extension, in first-come order', () => {
+    const artifactContent = (code: string) => ({
+      display_content: {
+        code,
+        filename: 'app.js',
+        language: 'javascript',
+        type: 'code_block',
+      },
+      name: 'artifacts',
+      type: 'tool_use',
+    });
+    const data = makeConversationWithMessages([
+      {
+        content: [
+          artifactContent('a'),
+          artifactContent('b'),
+          artifactContent('c'),
+        ],
+        parent_message_uuid: '00000000-0000-0000-0000-000000000000',
+        sender: 'assistant',
+        uuid: 'm1',
+      },
+    ] as unknown as ChatMessage[]);
+    expect(extractArtifactFiles(data)).toEqual([
+      { content: 'a', filename: 'app.js' },
+      { content: 'b', filename: 'app_1.js' },
+      { content: 'c', filename: 'app_2.js' },
+    ]);
+  });
+
+  it('sanitizes characters that are invalid in filenames', () => {
+    const data = makeConversationWithMessages([
+      {
+        content: [
+          {
+            text: '<antArtifact language="python" title="a/b:c?">x</antArtifact>',
+            type: 'text',
+          },
+        ],
+        parent_message_uuid: '00000000-0000-0000-0000-000000000000',
+        sender: 'assistant',
+        uuid: 'm1',
+      },
+    ] as unknown as ChatMessage[]);
+    expect(extractArtifactFiles(data)[0].filename).toBe('a_b_c_.py');
+  });
+});
+
+// Characterization: pins the behaviour the refactor must not change.
+describe('extractArtifactsFromMessage — extraction paths', () => {
+  const OLD_TAG =
+    '<antArtifact identifier="a1" type="text/html" title="Page">' +
+    '<h1>hi</h1>' +
+    '</antArtifact>';
+
+  it('extracts <antArtifact> tags found in a content array text block', () => {
+    const message = {
+      content: [{ text: OLD_TAG, type: 'text' }],
+    } as unknown as ChatMessage;
+    expect(extractArtifactsFromMessage(message)).toEqual([
+      {
+        content: '<h1>hi</h1>',
+        identifier: 'a1',
+        language: 'html',
+        title: 'Page',
+        type: 'code',
+      },
+    ]);
+  });
+
+  it('extracts <antArtifact> tags from the message.text fallback', () => {
+    const message = { text: OLD_TAG } as unknown as ChatMessage;
+    expect(extractArtifactsFromMessage(message)).toHaveLength(1);
+  });
+
+  // The message.text fallback runs unconditionally — it is NOT an `else` on the
+  // content-array branch. A message carrying the same tag in both places yields
+  // the artifact twice. Pinned as-is; see the report, this looks like a latent bug.
+  it('runs BOTH the content-array path and the message.text fallback', () => {
+    const message = {
+      content: [{ text: OLD_TAG, type: 'text' }],
+      text: OLD_TAG,
+    } as unknown as ChatMessage;
+    const artifacts = extractArtifactsFromMessage(message);
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0]).toEqual(artifacts[1]);
+  });
+
+  it('silently drops a json_block that fails to parse and keeps going', () => {
+    const message = {
+      content: [
+        {
+          display_content: { json_block: '{not json', type: 'json_block' },
+          name: 'artifacts',
+          type: 'tool_use',
+        },
+        {
+          display_content: {
+            code: 'ok',
+            filename: 'good.py',
+            language: 'python',
+            type: 'code_block',
+          },
+          name: 'artifacts',
+          type: 'tool_use',
+        },
+      ],
+    } as unknown as ChatMessage;
+    const artifacts = extractArtifactsFromMessage(message);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].title).toBe('good');
+  });
+});
+
+describe('extractArtifactsFromText — type to language mapping', () => {
+  const extract = (attrs: string) =>
+    extractArtifactsFromText(`<antArtifact ${attrs}>body</antArtifact>`)[0];
+
+  it('maps text/html', () => {
+    const a = extract('type="text/html"');
+    expect([a.language, a.type]).toEqual(['html', 'code']);
+  });
+
+  it('maps text/markdown', () => {
+    const a = extract('type="text/markdown"');
+    expect([a.language, a.type]).toEqual(['markdown', 'document']);
+  });
+
+  it('maps application/vnd.ant.code using the language attribute', () => {
+    const a = extract('type="application/vnd.ant.code" language="rust"');
+    expect([a.language, a.type]).toEqual(['rust', 'code']);
+  });
+
+  it('maps application/vnd.ant.code without a language attribute to txt', () => {
+    const a = extract('type="application/vnd.ant.code"');
+    expect([a.language, a.type]).toEqual(['txt', 'code']);
+  });
+
+  it('maps text/css', () => {
+    const a = extract('type="text/css"');
+    expect([a.language, a.type]).toEqual(['css', 'code']);
+  });
+
+  it('maps application/vnd.ant.mermaid', () => {
+    const a = extract('type="application/vnd.ant.mermaid"');
+    expect([a.language, a.type]).toEqual(['mermaid', 'document']);
+  });
+
+  it('maps application/vnd.ant.react', () => {
+    const a = extract('type="application/vnd.ant.react"');
+    expect([a.language, a.type]).toEqual(['jsx', 'code']);
+  });
+
+  it('maps image/svg+xml', () => {
+    const a = extract('type="image/svg+xml"');
+    expect([a.language, a.type]).toEqual(['svg', 'code']);
+  });
+
+  it('falls through to text/txt for an unrecognised type', () => {
+    const a = extract('type="application/x-nonsense" language="rust"');
+    expect([a.language, a.type]).toEqual(['txt', 'text']);
+  });
+
+  it('uses the bare language attribute when no type is present', () => {
+    const a = extract('language="python"');
+    expect([a.language, a.type]).toEqual(['python', 'code']);
+  });
+
+  it('defaults title to Untitled and identifier to null', () => {
+    const a = extract('language="python"');
+    expect([a.title, a.identifier]).toEqual(['Untitled', null]);
   });
 });
 

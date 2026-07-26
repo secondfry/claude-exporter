@@ -17,14 +17,29 @@ import {
 } from './schema';
 import type { CacheRecord } from './schema';
 
+// Two pieces of module-level state, both deliberately so: each describes this
+// JavaScript context's single relationship with one database, and every caller
+// of every function below must observe the same value. Neither can become a
+// local or a parameter without threading it through the whole file.
+
 /**
  * Latches for the life of this context once the browser refuses a write.
  * Retrying after a quota failure only burns time — every subsequent write in
  * the same run fails the same way. It must never fail the export itself: the
  * bytes are already in memory and the ZIP is unaffected (ADR-0002).
+ *
+ * Reset only by clearRecords (space was just reclaimed, so the next write may
+ * genuinely succeed) and by the test seam.
  */
 let quotaExceeded = false;
 
+/**
+ * The memoised connection. Module-level because it is the memo: hoisting it
+ * into a function would open a second connection per call, and a second
+ * connection blocks the version change that drops the stores. It is nulled
+ * from three places — a failed open, `onversionchange`, and the test seam —
+ * each of which means the handle we were holding is no longer good.
+ */
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 const isQuotaError = (error: unknown): boolean => {
@@ -92,19 +107,29 @@ const enforceSignature = async (db: IDBDatabase): Promise<void> => {
   }
 };
 
+/** An open, signature-checked connection. Says nothing about caching it. */
+const connect = async (): Promise<IDBDatabase> => {
+  const db = await openDatabase();
+  await enforceSignature(db);
+  return db;
+};
+
+/**
+ * Never leave a failed open memoised — the next call gets a fresh attempt,
+ * which matters because the usual causes (an upgrade blocked by another tab, a
+ * transient open error) clear on their own.
+ */
+const forgetOnFailure = (
+  pending: Promise<IDBDatabase>,
+): Promise<IDBDatabase> => {
+  return pending.catch((error) => {
+    dbPromise = null;
+    throw new Error('Could not connect to the Chat Cache', { cause: error });
+  });
+};
+
 const getDatabase = (): Promise<IDBDatabase> => {
-  if (!dbPromise) {
-    dbPromise = openDatabase()
-      .then(async (db) => {
-        await enforceSignature(db);
-        return db;
-      })
-      .catch((error) => {
-        // Never cache a failed open: the next call gets a fresh attempt.
-        dbPromise = null;
-        throw error;
-      });
-  }
+  dbPromise ??= forgetOnFailure(connect());
   return dbPromise;
 };
 
@@ -116,21 +141,26 @@ const getRecord = async (uuid: string): Promise<CacheRecord | undefined> => {
   );
 };
 
+const writeRecord = async (record: CacheRecord): Promise<void> => {
+  const db = await getDatabase();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  await promisify(tx.objectStore(STORE_NAME).put(record));
+};
+
 /** Resolves false when the write was refused for want of space. */
 const putRecord = async (record: CacheRecord): Promise<boolean> => {
   if (quotaExceeded) return false;
 
   try {
-    const db = await getDatabase();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    await promisify(tx.objectStore(STORE_NAME).put(record));
+    await writeRecord(record);
     return true;
   } catch (error) {
-    if (isQuotaError(error)) {
-      quotaExceeded = true;
-      return false;
+    // Anything that is not the disk being full is the caller's problem to log.
+    if (!isQuotaError(error)) {
+      throw new Error('Could not write to the Chat Cache', { cause: error });
     }
-    throw error;
+    quotaExceeded = true;
+    return false;
   }
 };
 

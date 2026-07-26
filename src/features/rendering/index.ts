@@ -8,7 +8,156 @@ import {
   isProgrammingLanguage,
 } from '$features/artifacts';
 import { getCurrentBranch } from '$features/conversation/branch';
-import type { Conversation } from '$features/conversation/types';
+import type {
+  Attachment,
+  ChatMessage,
+  ContentBlock,
+  Conversation,
+} from '$features/conversation/types';
+
+/** Artifacts in the old inline format are rendered from the artifact list, not the prose. */
+const ARTIFACT_TAG = /<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g;
+
+const stripArtifactTags = (text: string): string =>
+  text.replace(ARTIFACT_TAG, '').trim();
+
+const numberField = (
+  source: Record<string, unknown>,
+  key: string,
+): number | undefined => {
+  const value = source[key];
+  return typeof value === 'number' ? value : undefined;
+};
+
+const collectArtifacts = (message: ChatMessage, includeArtifacts: boolean) => {
+  if (!includeArtifacts) return [];
+  const artifacts = extractArtifactsFromMessage(message);
+  if (artifacts.length > 0) {
+    console.log(
+      '📦 Found',
+      artifacts.length,
+      'artifact(s) in message:',
+      artifacts.map((a) => a.title),
+    );
+  }
+  return artifacts;
+};
+
+type Artifacts = ReturnType<typeof collectArtifacts>;
+
+// ============================================================================
+// Markdown
+// ============================================================================
+
+const renderMarkdownMetadata = (
+  data: Conversation,
+  conversationId: string | null,
+): string => {
+  const lines = [
+    `**Created:** ${new Date(data.created_at).toLocaleString()}\n`,
+    `**Updated:** ${new Date(data.updated_at).toLocaleString()}\n`,
+    `**Exported:** ${new Date().toLocaleString()}\n`,
+    `**Model:** ${data.model}\n`,
+  ];
+  if (conversationId) {
+    lines.push(
+      `**Link:** [https://claude.ai/chat/${conversationId}](https://claude.ai/chat/${conversationId})\n`,
+    );
+  }
+  if (data.truncated !== undefined) {
+    lines.push(`**Truncated:** ${data.truncated}\n`);
+  }
+  lines.push(`\n---\n\n`);
+  return lines.join('');
+};
+
+const renderMarkdownContentBlock = (
+  content: ContentBlock,
+  includeThinking: boolean,
+): string => {
+  if (content.type === 'thinking' && content.thinking && includeThinking) {
+    return `### Thinking\n\`\`\`\`\n${content.thinking}\n\`\`\`\`\n\n`;
+  }
+  // Everything else that is not plain prose (tool_use in particular) is either
+  // handled as an artifact or deliberately dropped.
+  if (content.type !== 'text' || !content.text) return '';
+
+  const textWithoutArtifacts = stripArtifactTags(content.text);
+  if (!textWithoutArtifacts) return '';
+  return `${textWithoutArtifacts}\n\n`;
+};
+
+const renderMarkdownBody = (
+  message: ChatMessage,
+  includeThinking: boolean,
+): string => {
+  if (message.content) {
+    return message.content
+      .map((content) => renderMarkdownContentBlock(content, includeThinking))
+      .join('');
+  }
+
+  if (!message.text) return '';
+  const textWithoutArtifacts = stripArtifactTags(message.text);
+  if (!textWithoutArtifacts) return '';
+  return `${textWithoutArtifacts}\n\n`;
+};
+
+const renderMarkdownAttachment = (attachment: Attachment): string => {
+  if (!attachment.file_name) {
+    // Pasted content (no file_name) — legacy label.
+    if (!attachment.extracted_content) return '';
+    return `### Pasted\n\`\`\`\`\n${attachment.extracted_content}\n\`\`\`\`\n\n`;
+  }
+
+  const meta = [];
+  const fileSize = numberField(attachment, 'file_size');
+  if (fileSize) meta.push(`${(fileSize / 1024).toFixed(1)} KB`);
+  if (attachment.file_type) meta.push(attachment.file_type);
+
+  const suffix = meta.length > 0 ? ` _(${meta.join(', ')})_` : '';
+  const header = `### Attachment: ${attachment.file_name}${suffix}\n`;
+
+  if (!attachment.extracted_content) return `${header}\n`;
+  return `${header}\`\`\`\`\n${attachment.extracted_content}\n\`\`\`\`\n\n`;
+};
+
+const renderMarkdownArtifact = (artifact: Artifacts[number]): string => {
+  const header =
+    `#### 📦 Artifact: ${artifact.title}\n` +
+    `**Type:** ${artifact.type} | **Language:** ${artifact.language}\n\n`;
+
+  if (artifact.type === 'code' || isProgrammingLanguage(artifact.language)) {
+    return `${header}\`\`\`${artifact.language}\n${artifact.content}\n\`\`\`\n\n`;
+  }
+  return `${header}${artifact.content}\n\n`;
+};
+
+const renderMarkdownMessage = (
+  message: ChatMessage,
+  includeMetadata: boolean,
+  includeArtifacts: boolean,
+  includeThinking: boolean,
+): string => {
+  const sender = message.sender === 'human' ? '## User' : '## Claude';
+  const timestamp =
+    includeMetadata && message.created_at
+      ? `**${new Date(message.created_at).toISOString()}**\n`
+      : '';
+
+  // Artifacts are extracted from the whole message, then rendered after the
+  // prose — so the prose walk strips their inline tags rather than repeating them.
+  const artifacts = collectArtifacts(message, includeArtifacts);
+
+  return [
+    `${sender}\n`,
+    timestamp,
+    `\n`,
+    renderMarkdownBody(message, includeThinking),
+    ...(message.attachments ?? []).map(renderMarkdownAttachment),
+    ...artifacts.map(renderMarkdownArtifact),
+  ].join('');
+};
 
 // Convert to markdown format
 const convertToMarkdown = (
@@ -26,126 +175,115 @@ const convertToMarkdown = (
     'includeThinking:',
     includeThinking,
   );
-  let markdown = `# ${data.name || 'Untitled Conversation'}\n\n`;
 
-  if (includeMetadata) {
-    markdown += `**Created:** ${new Date(data.created_at).toLocaleString()}\n`;
-    markdown += `**Updated:** ${new Date(data.updated_at).toLocaleString()}\n`;
-    markdown += `**Exported:** ${new Date().toLocaleString()}\n`;
-    markdown += `**Model:** ${data.model}\n`;
-    if (conversationId) {
-      markdown += `**Link:** [https://claude.ai/chat/${conversationId}](https://claude.ai/chat/${conversationId})\n`;
+  return [
+    `# ${data.name || 'Untitled Conversation'}\n\n`,
+    includeMetadata ? renderMarkdownMetadata(data, conversationId) : '',
+    ...getCurrentBranch(data).map((message) =>
+      renderMarkdownMessage(
+        message,
+        includeMetadata,
+        includeArtifacts,
+        includeThinking,
+      ),
+    ),
+  ].join('');
+};
+
+// ============================================================================
+// Plain text
+// ============================================================================
+
+const renderTextMetadata = (data: Conversation): string =>
+  [
+    `${data.name || 'Untitled Conversation'}\n`,
+    `Created: ${new Date(data.created_at).toLocaleString()}\n`,
+    `Updated: ${new Date(data.updated_at).toLocaleString()}\n`,
+    `Model: ${data.model}\n\n`,
+    '---\n\n',
+  ].join('');
+
+const isSummaryList = (value: unknown): value is { summary?: unknown }[] =>
+  Array.isArray(value);
+
+/** The most recent summary claude.ai attached to a thinking block. */
+const thinkingSummary = (content: ContentBlock): string => {
+  const summaries = content.summaries;
+  if (!isSummaryList(summaries)) return 'Thought process';
+  const summary = summaries.at(-1)?.summary;
+  return typeof summary === 'string' ? summary : 'Thought process';
+};
+
+/** Thinking and prose interleave in the content array but render as two blocks. */
+interface TextParts {
+  message: string;
+  thinking: string;
+}
+
+const textPartsFromContent = (
+  content: ContentBlock[],
+  includeThinking: boolean,
+): TextParts => {
+  const parts: TextParts = { message: '', thinking: '' };
+
+  for (const block of content) {
+    if (block.type === 'thinking' && block.thinking && includeThinking) {
+      parts.thinking += `[Thinking: ${thinkingSummary(block)}]\n${block.thinking}\n[End Thinking]\n\n`;
+      continue;
     }
-    if (data.truncated !== undefined) {
-      markdown += `**Truncated:** ${data.truncated}\n`;
-    }
-    markdown += `\n---\n\n`;
+    // Only prose, never tool_use.
+    if (block.type !== 'text' || !block.text) continue;
+    parts.message += stripArtifactTags(block.text) + ' ';
   }
 
-  // Get only the current branch messages
-  const branchMessages = getCurrentBranch(data);
+  return parts;
+};
 
-  for (const message of branchMessages) {
-    const sender = message.sender === 'human' ? '## User' : '## Claude';
-    markdown += `${sender}\n`;
-
-    if (includeMetadata && message.created_at) {
-      markdown += `**${new Date(message.created_at).toISOString()}**\n`;
-    }
-    markdown += `\n`;
-
-    // Extract artifacts from the entire message (handles both old and new formats)
-    const messageArtifacts = includeArtifacts
-      ? extractArtifactsFromMessage(message)
-      : [];
-    if (messageArtifacts.length > 0) {
-      console.log(
-        '📦 Found',
-        messageArtifacts.length,
-        'artifact(s) in message:',
-        messageArtifacts.map((a) => a.title),
-      );
-    }
-
-    // Render message text (excluding tool_use and artifact tags)
-    if (message.content) {
-      for (const content of message.content) {
-        // Handle thinking blocks (extended thinking)
-        if (
-          content.type === 'thinking' &&
-          content.thinking &&
-          includeThinking
-        ) {
-          markdown += `### Thinking\n\`\`\`\`\n${content.thinking}\n\`\`\`\`\n\n`;
-        }
-        // Handle regular text content (skip tool_use, we handle artifacts separately)
-        else if (content.type === 'text' && content.text) {
-          // Remove old-format artifact tags from text
-          const textWithoutArtifacts = content.text
-            .replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '')
-            .trim();
-          if (textWithoutArtifacts) {
-            markdown += `${textWithoutArtifacts}\n\n`;
-          }
-        }
-      }
-    } else if (message.text) {
-      // Handle old format - remove artifact tags from text
-      const textWithoutArtifacts = message.text
-        .replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '')
-        .trim();
-      if (textWithoutArtifacts) {
-        markdown += `${textWithoutArtifacts}\n\n`;
-      }
-    }
-
-    // Handle attachments (file uploads and pasted content)
-    if (message.attachments && message.attachments.length > 0) {
-      for (const attachment of message.attachments) {
-        if (attachment.file_name) {
-          // File attachment — show file metadata + extracted content if present
-          let header = `### Attachment: ${attachment.file_name}`;
-          const meta = [];
-          const fileSize = attachment.file_size as number | undefined;
-          if (fileSize) {
-            meta.push(`${(fileSize / 1024).toFixed(1)} KB`);
-          }
-          if (attachment.file_type) {
-            meta.push(attachment.file_type);
-          }
-          if (meta.length > 0) {
-            header += ` _(${meta.join(', ')})_`;
-          }
-          markdown += `${header}\n`;
-          if (attachment.extracted_content) {
-            markdown += `\`\`\`\`\n${attachment.extracted_content}\n\`\`\`\`\n\n`;
-          } else {
-            markdown += `\n`;
-          }
-        } else if (attachment.extracted_content) {
-          // Pasted content (no file_name) — legacy label
-          markdown += `### Pasted\n\`\`\`\`\n${attachment.extracted_content}\n\`\`\`\`\n\n`;
-        }
-      }
-    }
-
-    // Render all artifacts found in the message
-    for (const artifact of messageArtifacts) {
-      markdown += `#### 📦 Artifact: ${artifact.title}\n`;
-      markdown += `**Type:** ${artifact.type} | **Language:** ${artifact.language}\n\n`;
-
-      if (
-        artifact.type === 'code' ||
-        isProgrammingLanguage(artifact.language)
-      ) {
-        markdown += `\`\`\`${artifact.language}\n${artifact.content}\n\`\`\`\n\n`;
-      } else {
-        markdown += `${artifact.content}\n\n`;
-      }
-    }
+const textPartsFromMessage = (
+  message: ChatMessage,
+  includeThinking: boolean,
+): TextParts => {
+  if (message.content) {
+    return textPartsFromContent(message.content, includeThinking);
   }
+  if (!message.text) return { message: '', thinking: '' };
+  return { message: stripArtifactTags(message.text), thinking: '' };
+};
 
-  return markdown;
+const renderTextArtifact = (artifact: Artifacts[number]): string =>
+  `\n[Artifact: ${artifact.title} (${artifact.language})]\n` +
+  `${artifact.content}\n` +
+  `[End Artifact]\n`;
+
+const renderTextAttachment = (attachment: Attachment): string => {
+  if (!attachment.extracted_content) return '';
+  const fileSize = numberField(attachment, 'file_size');
+  const size = fileSize ? ` (${fileSize} bytes)` : '';
+  return (
+    `\n[Pasted content${size}]\n` +
+    `${attachment.extracted_content}\n` +
+    `[End Pasted content]\n`
+  );
+};
+
+const renderTextMessage = (
+  message: ChatMessage,
+  includeArtifacts: boolean,
+  includeThinking: boolean,
+): string => {
+  const artifacts = includeArtifacts
+    ? extractArtifactsFromMessage(message)
+    : [];
+  const parts = textPartsFromMessage(message, includeThinking);
+  const senderLabel = message.sender === 'human' ? 'User' : 'Claude';
+
+  return [
+    parts.thinking,
+    `${senderLabel}: ${parts.message.trim()}\n`,
+    ...artifacts.map(renderTextArtifact),
+    ...(message.attachments ?? []).map(renderTextAttachment),
+    `\n`,
+  ].join('');
 };
 
 // Convert to plain text
@@ -154,105 +292,14 @@ const convertToText = (
   includeMetadata: boolean,
   includeArtifacts: boolean = true,
   includeThinking: boolean = true,
-): string => {
-  let text = '';
-
-  // Add metadata header if requested
-  if (includeMetadata) {
-    text += `${data.name || 'Untitled Conversation'}\n`;
-    text += `Created: ${new Date(data.created_at).toLocaleString()}\n`;
-    text += `Updated: ${new Date(data.updated_at).toLocaleString()}\n`;
-    text += `Model: ${data.model}\n\n`;
-    text += '---\n\n';
-  }
-
-  // Get only the current branch messages
-  const branchMessages = getCurrentBranch(data);
-
-  branchMessages.forEach((message) => {
-    // Extract artifacts from the entire message (handles both old and new formats)
-    const artifacts = includeArtifacts
-      ? extractArtifactsFromMessage(message)
-      : [];
-
-    // Get the message text (excluding artifacts)
-    let messageText = '';
-    let thinkingText = '';
-    if (message.content) {
-      for (const content of message.content) {
-        // Handle thinking blocks
-        if (
-          content.type === 'thinking' &&
-          content.thinking &&
-          includeThinking
-        ) {
-          const summaries = content.summaries as
-            { summary: string }[] | undefined;
-          const summary =
-            summaries && summaries.length > 0
-              ? summaries[summaries.length - 1].summary
-              : 'Thought process';
-          thinkingText += `[Thinking: ${summary}]\n${content.thinking}\n[End Thinking]\n\n`;
-        }
-        // Only include text content, skip tool_use
-        else if (content.type === 'text' && content.text) {
-          // Remove old-format artifact tags
-          messageText +=
-            content.text
-              .replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '')
-              .trim() + ' ';
-        }
-      }
-    } else if (message.text) {
-      // Handle old format - remove artifact tags
-      messageText = message.text
-        .replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '')
-        .trim();
-    }
-
-    messageText = messageText.trim();
-
-    // Use full label for all messages
-    let senderLabel;
-    if (message.sender === 'human') {
-      senderLabel = 'User';
-    } else {
-      senderLabel = 'Claude';
-    }
-
-    // Add thinking text if present
-    if (thinkingText) {
-      text += thinkingText;
-    }
-
-    text += `${senderLabel}: ${messageText}\n`;
-
-    // Add artifacts if present
-    if (artifacts.length > 0) {
-      for (const artifact of artifacts) {
-        text += `\n[Artifact: ${artifact.title} (${artifact.language})]\n`;
-        text += `${artifact.content}\n`;
-        text += `[End Artifact]\n`;
-      }
-    }
-
-    // Add pasted content if present
-    if (message.attachments && message.attachments.length > 0) {
-      for (const attachment of message.attachments) {
-        if (attachment.extracted_content) {
-          const fileSize = attachment.file_size as number | undefined;
-          const size = fileSize ? ` (${fileSize} bytes)` : '';
-          text += `\n[Pasted content${size}]\n`;
-          text += `${attachment.extracted_content}\n`;
-          text += `[End Pasted content]\n`;
-        }
-      }
-    }
-
-    text += `\n`;
-  });
-
-  return text.trim();
-};
+): string =>
+  [
+    includeMetadata ? renderTextMetadata(data) : '',
+    ...getCurrentBranch(data).map((message) =>
+      renderTextMessage(message, includeArtifacts, includeThinking),
+    ),
+  ]
+    .join('')
+    .trim();
 
 export { convertToMarkdown, convertToText };
