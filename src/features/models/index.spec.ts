@@ -75,6 +75,8 @@ describe('formatModelName — full family × shape matrix', () => {
     ['sonnet', 'Sonnet'],
     ['opus', 'Opus'],
     ['haiku', 'Haiku'],
+    ['fable', 'Fable'],
+    ['mythos', 'Mythos'],
   ];
 
   for (const [family, label] of families) {
@@ -109,24 +111,30 @@ describe('formatModelName — minor-version regex boundary (\\d{1,2})', () => {
   });
 });
 
-// Documented behavior for unknown families (e.g. a hypothetical future "Mythos").
-// Current regex hardcodes `(sonnet|opus|haiku)` — anything else falls through to
-// raw display. These tests pin that behavior so the day Anthropic ships a new
-// family, we get a heads-up via test failure rather than ugly UI.
-describe('formatModelName — unknown family fallthrough', () => {
-  it('returns raw ID for new family with non-numeric version (e.g. -preview)', () => {
+// Fable and Mythos, added in v1.22.0. The heads-up-on-a-new-family tests that
+// used to live here did their job: they were written against a hypothetical
+// "Mythos" and started asserting the wrong thing the day it shipped.
+describe('formatModelName — Fable and Mythos', () => {
+  it('renders the major-only dateless IDs Anthropic ships', () => {
+    expect(formatModelName('claude-fable-5')).toBe('Claude Fable 5');
+    expect(formatModelName('claude-mythos-5')).toBe('Claude Mythos 5');
+    expect(formatModelName('claude-sonnet-5')).toBe('Claude Sonnet 5');
+    expect(formatModelName('claude-opus-5')).toBe('Claude Opus 5');
+  });
+
+  // claude-mythos-preview is a real, invitation-only ID whose version segment
+  // is a channel name, not a number — the only shape the numeric regex cannot
+  // express.
+  it('renders the named preview channel', () => {
     expect(formatModelName('claude-mythos-preview')).toBe(
-      'claude-mythos-preview',
+      'Claude Mythos Preview',
     );
   });
 
-  it('returns raw ID for new family with numeric version', () => {
-    expect(formatModelName('claude-mythos-1-0')).toBe('claude-mythos-1-0');
-  });
-
-  it('returns raw ID for new family with dated version', () => {
-    expect(formatModelName('claude-mythos-1-0-20260101')).toBe(
-      'claude-mythos-1-0-20260101',
+  it('still falls through for families that do not exist', () => {
+    expect(formatModelName('claude-chimera-1-0')).toBe('claude-chimera-1-0');
+    expect(formatModelName('claude-chimera-preview')).toBe(
+      'claude-chimera-preview',
     );
   });
 });
@@ -211,9 +219,14 @@ describe('getModelBadgeClass', () => {
     expect(getModelBadgeClass('gpt-4')).toBe('');
   });
 
-  it('returns empty string for new claude family without a registered badge', () => {
-    expect(getModelBadgeClass('claude-mythos-preview')).toBe('');
-    expect(getModelBadgeClass('claude-mythos-1-0')).toBe('');
+  it('returns fable/mythos for the new families', () => {
+    expect(getModelBadgeClass('claude-fable-5')).toBe('fable');
+    expect(getModelBadgeClass('claude-mythos-5')).toBe('mythos');
+    expect(getModelBadgeClass('claude-mythos-preview')).toBe('mythos');
+  });
+
+  it('returns empty string for a claude family without a registered badge', () => {
+    expect(getModelBadgeClass('claude-chimera-preview')).toBe('');
   });
 
   it('handles null/empty input without throwing', () => {

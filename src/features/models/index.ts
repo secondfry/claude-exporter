@@ -2,6 +2,20 @@ import type { Conversation } from '$features/conversation/types';
 
 // ----- Model utilities -----
 
+// The model families claude.ai serves. Both `formatModelName` regexes and
+// `getModelBadgeClass` are built from this one list, so adding a family is a
+// single edit — the previous hardcoded `(sonnet|opus|haiku)` appeared in three
+// places and a new family silently fell through to a raw ID in the UI.
+// `fable` and `mythos` are here ahead of general availability: an unrecognised
+// family costs a broken-looking Model column, and recognising one that never
+// ships costs nothing.
+const MODEL_FAMILIES = ['sonnet', 'opus', 'haiku', 'fable', 'mythos'] as const;
+
+const FAMILY_ALTERNATION = MODEL_FAMILIES.join('|');
+
+const capitalise = (word: string): string =>
+  word.charAt(0).toUpperCase() + word.slice(1);
+
 interface ModelTimelineEntry {
   date: Date;
   model: string;
@@ -34,34 +48,52 @@ const inferModel = (conversation: Conversation): string => {
 
 // Format a model ID like `claude-sonnet-4-5-20250929` into "Claude Sonnet 4.5".
 // Schema reference: https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions
-// Handles three documented shapes for the sonnet/opus/haiku families:
-//   - Dateless 4.6+:        claude-{name}-{major}-{minor}            (canonical snapshot)
+// Handles four documented shapes:
+//   - Dateless 4.6+:        claude-{name}-{major}[-{minor}]          (canonical snapshot)
 //   - Dated pre-4.6:        claude-{name}-{major}-{minor}-{YYYYMMDD}
 //   - Convenience alias:    claude-{name}-{major}-{minor}            (resolves to most recent dated snapshot)
-// Unknown families (anything not in `(sonnet|opus|haiku)`) fall through to raw display.
+//   - Named channel:        claude-{name}-preview                    (e.g. claude-mythos-preview)
+// Unknown families (anything not in MODEL_FAMILIES) fall through to raw display.
 const formatModelName = (model: string | null | undefined): string => {
   if (!model || !model.startsWith('claude-')) {
     return model || 'Unknown';
   }
 
+  // Named channel rather than a version: claude-mythos-preview ships this way
+  // alongside the numbered claude-mythos-5, so the version segment is not
+  // always numeric.
+  const channelMatch = model.match(
+    new RegExp(`^claude-(${FAMILY_ALTERNATION})-(preview)$`, 'i'),
+  );
+  if (channelMatch) {
+    const [, modelType, channel] = channelMatch;
+    return `Claude ${capitalise(modelType)} ${capitalise(channel)}`;
+  }
+
   // New format: claude-{type}-{major}[-{minor}][-{date}]
   const newFormatMatch = model.match(
-    /^claude-(sonnet|opus|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/i,
+    new RegExp(
+      `^claude-(${FAMILY_ALTERNATION})-(\\d+)(?:-(\\d{1,2}))?(?:-\\d{8})?$`,
+      'i',
+    ),
   );
   if (newFormatMatch) {
     const [, modelType, major, minor] = newFormatMatch;
-    const modelName = modelType.charAt(0).toUpperCase() + modelType.slice(1);
+    const modelName = capitalise(modelType);
     const version = minor ? `${major}.${minor}` : major;
     return `Claude ${modelName} ${version}`;
   }
 
   // Old format: claude-{major}[-{minor}]-{type}-{date}
   const oldFormatMatch = model.match(
-    /^claude-(\d+)(?:-(\d+))?-(sonnet|opus|haiku)-\d{8}$/i,
+    new RegExp(
+      `^claude-(\\d+)(?:-(\\d+))?-(${FAMILY_ALTERNATION})-\\d{8}$`,
+      'i',
+    ),
   );
   if (oldFormatMatch) {
     const [, major, minor, modelType] = oldFormatMatch;
-    const modelName = modelType.charAt(0).toUpperCase() + modelType.slice(1);
+    const modelName = capitalise(modelType);
     const version = minor ? `${major}.${minor}` : major;
     return `Claude ${modelName} ${version}`;
   }
@@ -72,9 +104,9 @@ const formatModelName = (model: string | null | undefined): string => {
 // Returns CSS badge class name based on the model family
 const getModelBadgeClass = (model: string | null | undefined): string => {
   if (!model) return '';
-  if (model.includes('sonnet')) return 'sonnet';
-  if (model.includes('opus')) return 'opus';
-  if (model.includes('haiku')) return 'haiku';
+  for (const family of MODEL_FAMILIES) {
+    if (model.includes(family)) return family;
+  }
   return '';
 };
 
@@ -83,4 +115,5 @@ export {
   formatModelName,
   getModelBadgeClass,
   inferModel,
+  MODEL_FAMILIES,
 };

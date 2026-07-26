@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.22.0]
+
+**The Model column knows about Fable and Mythos.** `claude-fable-5` and `claude-sonnet-5` are generally available and already appear in exported archives, but the family list behind `formatModelName` was `(sonnet|opus|haiku)` — so those chats rendered as a raw model ID with no badge colour, in the one column whose whole purpose is that the API does not record which model wrote which message.
+
+The family list is now a single constant that both the format regexes and the badge class read from; it used to appear in three places, which is how a new family could half-work. `claude-mythos-preview` is handled explicitly: its version segment is a channel name rather than a number, the only shipped shape the numeric pattern cannot express.
+
+Three tests written against a hypothetical future "Mythos" asserted the fallthrough-to-raw-ID behaviour precisely so they would fail the day it shipped. They did. They now assert the formatted output instead, and the fallthrough case moved to a family that does not exist.
+
+`DEFAULT_MODEL_TIMELINE` is deliberately untouched. It answers "what was claude.ai's default on this date" for conversations the API returns with a null model, and guessing a switchover date would relabel real archived chats — Fable and Mythos are not defaults, and no reliable date is known for Sonnet 5.
+
 ## [1.21.4]
 
 **The smoke test is no longer one item, and no longer Critical.** It had been a single Critical-priority block since v1.12.0 covering everything from Chrome never being loaded to one unclicked button, which meant it could never be finished and never be dropped — the definition of an item that stops being read. Firefox passed, including both Chat Cache invariants that only a browser can check, so that run moves to Completed as a record of what was actually established.

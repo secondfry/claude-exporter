@@ -32,6 +32,8 @@
         --badge-sonnet: #ce5c04;
         --badge-haiku: #09923b;
         --badge-opus: #7c3aed;
+        --badge-fable: #0e7490;
+        --badge-mythos: #b91c4c;
       }
 
       @media (prefers-color-scheme: dark) {
@@ -63,6 +65,8 @@
           --badge-sonnet: #ffaa66;
           --badge-haiku: #66cc66;
           --badge-opus: #c084cc;
+          --badge-fable: #5ec8dd;
+          --badge-mythos: #f2879f;
         }
       }
 
@@ -584,6 +588,14 @@
         color: var(--badge-opus);
       }
 
+      .model-badge.fable {
+        color: var(--badge-fable);
+      }
+
+      .model-badge.mythos {
+        color: var(--badge-mythos);
+      }
+
       .model-bounced {
         margin-left: 4px;
         font-size: 12px;
@@ -598,6 +610,12 @@
       }
       .model-bounced.opus {
         color: var(--badge-opus);
+      }
+      .model-bounced.fable {
+        color: var(--badge-fable);
+      }
+      .model-bounced.mythos {
+        color: var(--badge-mythos);
       }
 
       /* Wrapper that carries the tooltip + cursor so hover works on the badge or asterisk */

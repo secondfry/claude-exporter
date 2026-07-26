@@ -84,20 +84,12 @@
   moving to a single background-worker-owned writer that both contexts relay through
   (mirroring how the Chat Cache already relays through background per ADR-0003).
 
-- **Prepare for new model families (e.g. Mythos)**
-  - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
-  - Current `formatModelName` regex in [src/features/](../src/features/) hardcodes family ∈ `{sonnet, opus, haiku}` — anything else (e.g. expected `claude-mythos-preview`) falls through to raw-ID display and gets no badge color
-  - Test coverage now pins this behavior — [src/features/models/index.spec.ts](../src/features/models/index.spec.ts) "unknown family fallthrough" suite will fail loudly the day Anthropic ships a new family, prompting a regex bump + new badge CSS class
-  - When a new family lands, the change is small:
-    1. Add family to the `(sonnet|opus|haiku)` regex group in `formatModelName`
-    2. Add an `if (model.includes('mythos'))` branch in `getModelBadgeClass`
-    3. Add `.mythos` CSS class with brand color in popup.html, browse.html, content.css
-    4. Add timeline entry to `DEFAULT_MODEL_TIMELINE` once it becomes the default on claude.ai
-  - Note: `-preview` suffix breaks the version-segment regex (expects `\d{1,2}`); needs special-casing or a broader regex if Anthropic stabilizes that naming
-  - Bedrock/Vertex prefixes intentionally out of scope — claude.ai never serves those
-
-- **`DEFAULT_MODEL_TIMELINE` maintenance**
+- **`DEFAULT_MODEL_TIMELINE` has no entry past Claude Sonnet 4.6 (2026-02-17)**
   - Every time claude.ai bumps its default model, add an entry; otherwise old null-model conversations get inferred to a now-stale model
+  - Outstanding: Claude Sonnet 5 is generally available, but the date claude.ai
+    itself switched defaults is unknown, and an entry is a claim about that date —
+    guessing it silently relabels real archived chats. Needs an observed switchover,
+    not a release-note date. Fable and Mythos are not defaults and do not belong here
   - Sanity check in [src/features/models/index.spec.ts](../src/features/models/index.spec.ts) confirms every entry parses cleanly through `formatModelName` (catches typos)
   - Future: consider sourcing from a JSON config file or remote endpoint instead of hardcoded array
 
@@ -260,6 +252,22 @@
 (none currently open)
 
 ## Completed ✅
+
+- **Fable and Mythos model families** (v1.22.0)
+  - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
+  - The family list is now one constant, `MODEL_FAMILIES`, that both `formatModelName`
+    regexes and `getModelBadgeClass` are built from. It had been hardcoded in three
+    places, which is how a family could half-work — coloured but unnamed, or the reverse
+  - `claude-mythos-preview` is handled by its own branch: its version segment is a
+    channel name, not a number, and it is the only shipped shape the numeric pattern
+    cannot express
+  - The three "unknown family fallthrough" tests were written against a hypothetical
+    Mythos precisely so they would fail the day it shipped. They did. They now assert
+    the formatted output, and the fallthrough case moved to a family that does not exist
+  - Badge colours live only in `browse.html` — the old plan named `popup.html` and
+    `content.css` too, but neither has ever carried model-badge CSS
+  - Bedrock/Vertex prefixes remain out of scope — claude.ai never serves those
+  - Left open: the `DEFAULT_MODEL_TIMELINE` gap, above
 
 - **Manual smoke test in Firefox** (v1.20.0–v1.21.3)
   - First time any of this ran in a browser since the v1.11.0 restructure. Signed
