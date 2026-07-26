@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.20.1]
+
+**The Chat Cache is confirmed working in production.** The signed v1.20.0 build has been running in release Firefox against a real account: 1,111 conversations cached, 62 MB on disk, with the count and Clear Cache both live in Options. Until now every claim about the cache rested on unit tests and a build-output audit — nothing had been loaded into a browser since the v1.11.0 restructure. TODO's critical smoke-test item is narrowed rather than closed: Chrome has still never been loaded, and the export, cancel, backup and permission-revoke checks remain unverified in either browser.
+
 ## [1.20.0]
 
 **This fork has its own Firefox add-on ID.** `browser_specific_settings.gecko.id` still carried `{25798758-...}`, which belongs to the upstream agoramachina AMO listing. Signing against an ID you do not own fails outright, and a build claiming it would collide with the store version on install. Replaced with a freshly generated UUID; AMO treats this as a distinct add-on, so it installs and updates independently of upstream.

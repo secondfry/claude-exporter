@@ -4,10 +4,11 @@
 
 ### Critical Priority 🔴
 
-- **Manual smoke test of v1.12.0 in both browsers** — the restructure and the Chat
-  Cache are verified by typecheck, 158 unit tests and a build-output audit, but
-  nothing has actually been loaded into a browser yet. Load `dist/chrome/` unpacked
-  and `dist/firefox/` temporary, then check: popup Export Current + Export All,
+- **Manual smoke test in both browsers** — partially done. As of v1.20.0 the signed
+  build runs in production Firefox and the Chat Cache is confirmed working there
+  (1,111 conversations, 62 MB, count and Clear Cache surfaced in Options). Chrome has
+  still never been loaded, and the rest of the checklist below is unverified in either
+  browser. Load `dist/chrome/` unpacked, then check: popup Export Current + Export All,
   browse page load / filter / select / Export Selected, cancel mid-export, options
   save + Test Connection, backup export and re-import, and Firefox's permission
   prompt after revoking host access in `about:addons`.
