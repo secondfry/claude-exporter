@@ -38,7 +38,7 @@ let downloads: CapturedDownload[] = [];
 // The pipeline hands the file to the browser through an <a download>. Under the
 // node test environment there is no DOM, so we stand in for just enough of one
 // to capture what would have been downloaded.
-function installDomStub(): void {
+const installDomStub = (): void => {
   const blobsByUrl = new Map<string, Blob>();
   let counter = 0;
 
@@ -62,9 +62,9 @@ function installDomStub(): void {
     },
     revokeObjectURL: () => {},
   });
-}
+};
 
-function conversation(uuid: string, name: string): Conversation {
+const conversation = (uuid: string, name: string): Conversation => {
   return {
     chat_messages: [{ sender: 'human', text: 'hi', uuid: 'm1' }],
     created_at: '2025-01-01T00:00:00Z',
@@ -72,9 +72,9 @@ function conversation(uuid: string, name: string): Conversation {
     updated_at: '2025-01-02T00:00:00Z',
     uuid,
   };
-}
+};
 
-function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
+const options = (overrides: Partial<ExportOptions> = {}): ExportOptions => {
   return {
     artifactFormat: 'original',
     extractArtifacts: false,
@@ -86,18 +86,18 @@ function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
     includeThinking: true,
     ...overrides,
   };
-}
+};
 
-function targets(...names: string[]): ExportTarget[] {
+const targets = (...names: string[]): ExportTarget[] => {
   return names.map((name, i) => ({ name, uuid: `uuid-${i}` }));
-}
+};
 
-async function zipPaths(blob: Blob): Promise<string[]> {
+const zipPaths = async (blob: Blob): Promise<string[]> => {
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   return Object.keys(zip.files)
     .filter((path) => !zip.files[path].dir)
     .sort();
-}
+};
 
 beforeEach(() => {
   downloads = [];
@@ -496,7 +496,7 @@ describe('cancellation', () => {
 // ---------------------------------------------------------------------------
 // Chat Cache (ADR-0002)
 
-function fakeCache(seed: Conversation[] = []) {
+const fakeCache = (seed: Conversation[] = []) => {
   const store = new Map(seed.map((conv) => [conv.uuid, conv]));
   const port = {
     read: vi.fn(async (uuid: string, updatedAt: string | undefined) => {
@@ -509,7 +509,7 @@ function fakeCache(seed: Conversation[] = []) {
     }),
   };
   return { port, store };
-}
+};
 
 describe('the Chat Cache', () => {
   it('serves a conversation whose updated_at still matches, without fetching', async () => {

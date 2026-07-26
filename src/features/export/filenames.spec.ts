@@ -11,7 +11,7 @@ import {
 } from './filenames';
 import type { ExportOptions } from './types';
 
-function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
+const options = (overrides: Partial<ExportOptions> = {}): ExportOptions => {
   return {
     artifactFormat: 'original',
     extractArtifacts: false,
@@ -23,7 +23,7 @@ function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
     includeThinking: true,
     ...overrides,
   };
-}
+};
 
 describe('sanitizeFilename', () => {
   it('replaces every character forbidden on Windows', () => {

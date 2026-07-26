@@ -48,21 +48,21 @@ const ZIP_OPTIONS = {
   type: 'blob',
 } as const;
 
-function delay(ms: number): Promise<void> {
+const delay = (ms: number): Promise<void> => {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
+};
 
-function throwIfAborted(signal?: AbortSignal): void {
+const throwIfAborted = (signal?: AbortSignal): void => {
   if (signal?.aborted) {
     throw new DOMException('Export aborted', 'AbortError');
   }
-}
+};
 
-function renderConversation(
+const renderConversation = (
   data: Conversation,
   uuid: string,
   options: ExportOptions,
-): string {
+): string => {
   switch (options.format) {
     case 'markdown':
       return convertToMarkdown(
@@ -82,7 +82,7 @@ function renderConversation(
     default:
       return JSON.stringify(data, null, 2);
   }
-}
+};
 
 /**
  * Lay one fetched conversation out as ZIP-relative paths.
@@ -92,12 +92,12 @@ function renderConversation(
  * writes at the root. The flat layout (`Chats/` + `Artifacts/`) is identical
  * either way.
  */
-function buildEntries(
+const buildEntries = (
   target: ExportTarget,
   data: Conversation,
   options: ExportOptions,
   nest: boolean,
-): ExportEntry[] {
+): ExportEntry[] => {
   // The fetched conversation's own name wins: the popup cannot cheaply know the
   // title so it sends none, and the browse page's list may be stale.
   const displayName = data.name || target.name || target.uuid;
@@ -164,9 +164,9 @@ function buildEntries(
     entries.push({ content: chatContent, isChat: true, path: chatFilename });
   }
   return entries;
-}
+};
 
-function downloadBlob(blob: Blob, filename: string): void {
+const downloadBlob = (blob: Blob, filename: string): void => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -175,7 +175,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
+};
 
 /**
  * Obtain one conversation, preferring the Chat Cache.
@@ -185,11 +185,11 @@ function downloadBlob(blob: Blob, filename: string): void {
  * fetched (ADR-0002). It stores the response untouched — `inferModel` runs
  * afterwards, on the caller's copy, so the cache keeps raw API JSON.
  */
-async function loadConversation(
+const loadConversation = async (
   orgId: string,
   target: ExportTarget,
   hooks: ExportHooks | undefined,
-): Promise<{ cached: boolean; data: Conversation; quota: boolean }> {
+): Promise<{ cached: boolean; data: Conversation; quota: boolean }> => {
   const cache = hooks?.cache;
 
   const hit = cache ? await cache.read(target.uuid, target.updatedAt) : null;
@@ -204,7 +204,7 @@ async function loadConversation(
 
   const status = cache ? await cache.write(data) : 'unavailable';
   return { cached: false, data, quota: status === 'quota' };
-}
+};
 
 interface FetchOutcome {
   /** Conversations answered from the cache, so never requested over the network. */
@@ -223,13 +223,13 @@ interface FetchOutcome {
   succeededIds: string[];
 }
 
-async function fetchAll(
+const fetchAll = async (
   orgId: string,
   targets: ExportTarget[],
   options: ExportOptions,
   hooks: ExportHooks | undefined,
   nest: boolean,
-): Promise<FetchOutcome> {
+): Promise<FetchOutcome> => {
   const total = targets.length;
   const collected = new Map<string, ExportEntry[]>();
   const failedNames: string[] = [];
@@ -308,7 +308,7 @@ async function fetchAll(
     resolvedNames,
     succeededIds,
   };
-}
+};
 
 interface FinishArgs {
   artifactCount: number;
@@ -331,7 +331,7 @@ interface FinishArgs {
  * user already has the file, so it is caught, warned, and reported via
  * `recordsWritten` instead of rejecting.
  */
-async function finish({
+const finish = async ({
   artifactCount,
   blob,
   cacheHits,
@@ -339,7 +339,7 @@ async function finish({
   failedNames,
   filename,
   succeededIds,
-}: FinishArgs): Promise<ExportResult> {
+}: FinishArgs): Promise<ExportResult> => {
   downloadBlob(blob, filename);
 
   let recordsWritten = true;
@@ -364,7 +364,7 @@ async function finish({
     fromCache: cacheHits,
     recordsWritten,
   };
-}
+};
 
 /**
  * Export one or more conversations to a file the user receives immediately.
@@ -372,12 +372,12 @@ async function finish({
  * Writes an Export Record for every conversation it succeeds on (CONTEXT.md)
  * and renders no UI: the caller reports through `hooks.onProgress`.
  */
-async function exportConversations(
+const exportConversations = async (
   orgId: string,
   targets: ExportTarget[],
   options: ExportOptions,
   hooks?: ExportHooks,
-): Promise<ExportResult> {
+): Promise<ExportResult> => {
   if (targets.length === 0) {
     throw new Error('Nothing to export. No conversations selected.');
   }
@@ -454,6 +454,6 @@ async function exportConversations(
     filename,
     succeededIds,
   });
-}
+};
 
 export { buildEntries, downloadBlob, exportConversations };
