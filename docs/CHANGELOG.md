@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.22.4]
+
+**Six regressions the refactor's own tests agreed with.** An adversarial review of v1.22.1–v1.22.3 found behaviour changes that 522 green tests missed, because the pass that introduced them also wrote the tests. Each fix ships with a test verified to fail against the previous commit — a test written after a refactor describes the refactor, not the requirement, unless you check it fails on the old code.
+
+Folding a target's load and its render into one `try` discarded what the load had learned when the render failed. The casualty was the cache-full warning: one conversation failing to render silenced it for the entire export, so every later export refetched over the network with nothing said. The same fold under-counted cache hits and skipped the inter-batch pause after a batch that hit the network and then failed — the case that has hammered the API hardest.
+
+The popup's partial-failure notice had been typed `success`, which is the one status type the popup erases after three seconds. It names the conversations that did not make it, and it is the only place they are named. Being unreachable from a spec is why nothing caught it, so the decision moved to a module a spec can reach.
+
+Also: the artifact MIME lookup was an object literal, so a `type` of `toString` found something inherited from `Object.prototype` and never reached the default; a uuid appearing twice in one conversation list overwrote rather than chained, erasing a model bounce and rewriting `firstSeen`; browse's private copy of the export-format rule disagreed with the popup's fallback, so the same unrecognised value exported as Markdown from one page and JSON from the other — the drift CLAUDE.md names by example.
+
+## [1.22.3]
+
+**Entrypoints were untestable by construction, so three of the four had no tests at all.** Not because the logic was simple — because it was welded to `innerHTML`, and the test environment is node with no jsdom. The decisions moved to siblings named for what they decide, and 195 tests landed on code that had none. `browse/index.ts` went from 989 lines to 751 and is now mostly wiring; its 200-line `setupEventListeners` was twelve unrelated concerns sharing a scope.
+
+`escapeHtml` went through `textContent`/`innerHTML`, which does not escape quotes, and most of its call sites were attribute values. A conversation titled `Bug in "auth"` broke out of `title=`/`data-name=` and produced a wrong export filename.
+
+`background`'s content-script file list is unchanged and now asserted against the manifest. CLAUDE.md rule 5 turns a partial list into a runtime `X is not defined`, which no existing check would have caught.
+
+## [1.22.2]
+
+**One job per function through the export, Chat Cache, rendering and artifact paths.** `fetchAll` was four levels deep around six mutable accumulators updated from inside a `Promise.all` callback; each target now yields a discriminated outcome and the run is reduced once at the end, which removes the shared mutable state rather than reformatting it.
+
+The Chat Cache's four swallowing catches stay swallowing — degrading is right there, since anything lost is refetchable from claude.ai — but each now logs an `Error` carrying `cause` and says why. The strict-equality freshness check gained the test CLAUDE.md's warning implies: one that fails if `===` is ever loosened to `>=`, a case `db.spec.ts` could not distinguish.
+
+Artifacts' nine-branch MIME cascade became a lookup table, and the type assertions over parsed JSON became predicates — an assertion was standing exactly where the data is least trustworthy.
+
+## [1.22.1]
+
+**The popup's organization-ID fallback had no seam to test through.** Three routes deep — content script, direct fetch, stored value — and every hop is a failure the user never sees, which is exactly the code that needs a test and exactly the code that had none. Persisting a successful detection was repeated at each success site, where a fourth route could quietly omit it; it is one loop now.
+
+Two nested try/catch blocks in the export handlers are gone. The inner one existed to re-enable a button, which `finally` now does on every route out. `as ExportFormat` sat on the one value a user can influence and type-checked whatever the HTML happened to contain.
+
 ## [1.22.0]
 
 **The Model column knows about Fable and Mythos.** `claude-fable-5` and `claude-sonnet-5` are generally available and already appear in exported archives, but the family list behind `formatModelName` was `(sonnet|opus|haiku)` — so those chats rendered as a raw model ID with no badge colour, in the one column whose whole purpose is that the API does not record which model wrote which message.

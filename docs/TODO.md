@@ -53,12 +53,14 @@
   in for. Moving the declaration into `features/export` would invert that; it is a real
   two-adapter seam, so only the ownership is wrong, not the design.
 
-- **DOM type assertions in `entrypoints/popup` and `entrypoints/options`** — roughly
-  thirty `getElementById(...) as HTMLInputElement`, the last holdouts against the
-  type-assertion ban in CLAUDE.md. `features/` and `platform/` are clean. Needs a
-  guarded lookup helper rather than thirty individual guards; overlaps with the
-  question of where shared entrypoint UI code is allowed to live, given there is no
-  `shared/`.
+- **DOM type assertions — mostly resolved in v1.22.1–v1.22.3, remainder is `browse`**
+  — popup, options, browse and content each got a `dom.ts` of `instanceof`-guarded
+  lookups, so the roughly thirty `getElementById(...) as HTMLInputElement` holdouts
+  are gone from those files. The open question the item raised is answered by
+  precedent, not by a rule: each entrypoint keeps its **own** `dom.ts` rather than
+  sharing one, because entrypoints importing from each other is the same coupling
+  `shared/` would have been. The duplication is four small files and is deliberate.
+  Remaining assertions live only in spec files.
 
 - **Replace the batches-of-3 export loop with a continuous concurrency limiter** — the
   current pipeline runs `Promise.all` over batches of 3 with a 200 ms inter-batch delay,
@@ -249,9 +251,56 @@
 
 ## Bugs 🐛
 
-(none currently open)
+- **An artifact present in both `content[].text` and `message.text` is extracted
+  twice** — `extractArtifactsFromMessage` runs the `message.text` sweep
+  unconditionally rather than as an `else` on the content-array branch, so the same
+  `<antArtifact>` tag yields two artifacts and `extractArtifactFiles` writes two
+  files, the second suffixed `_1`. Found during the v1.22.2 refactor and
+  deliberately left alone: it is pre-existing, and fixing it changes exported output,
+  so it wants a decision rather than a quiet correction. Pinned by a test describing
+  current behaviour, so the fix will be visible when someone makes it.
+
+- **Backup import's `replace` mode does not replace** — it goes through
+  `storage.set`, which merges, so a key present locally but absent from the backup
+  file survives a "replace". The mode label promises more than the mechanism
+  delivers. Pinned by a test in `features/backup/index.spec.ts` describing what
+  actually happens. Either the mode should clear first or it should be renamed.
+
+- **Search never trims** — `conversation-list` matches on the raw query, so a
+  trailing space or a pasted `" alpha"` empties the table. Pre-existing and
+  confirmed unchanged by the v1.22.x refactor; a likely source of "the filter is
+  broken" reports, along with `projects` mode returning every conversation when the
+  search is empty, and an unparseable `updated_at` reading as current (so the
+  conversation vanishes from both `pending` and `stale`).
 
 ## Completed ✅
+
+- **Return-early / SRP pass over the whole tree** (v1.22.1–v1.22.4)
+  - Rules applied: guard clauses over `if (x) { entire body }`, no more than two
+    levels of nesting, no nested try/catch, no `let x = default; try { x = ... }
+catch {}` (replaced by a getter that owns the try and returns the fallback), and
+    every caught error carried forward as `new Error('context', { cause: error })`
+  - Tests came first in every slice and were proven green against the unmodified
+    source before anything moved. 234 → 540 tests; the only deleted spec lines
+    across the whole pass are `import` statements
+  - **The lesson worth keeping**: the first three commits landed 522 green tests and
+    still shipped six behaviour changes, because the pass that wrote the code wrote
+    the tests. What caught them was an adversarial review diffing old against new
+    semantics by hand. A regression test written after the fact must be run against
+    the _old_ code and seen to fail, or it only describes what the refactor did
+  - Entrypoints were untestable by construction (node test environment, no jsdom), so
+    decisions moved into siblings and the entrypoint kept only DOM effects. That is
+    why three of the four had no tests, not because they were simple
+  - Genuine mutable state survived with a comment saying why: `dbPromise` (it _is_
+    the memo, and a second connection blocks the version change that drops the
+    stores), diagnostics' `suppressed` (re-entrancy across an async round trip),
+    `lastCheckedIndex` (shift-click range needs the previous click)
+  - One documented exception to the `cause` rule: the diagnostics logger cannot chain
+    a cause, because logging its own failure re-enters the listener it sits inside
+  - Deliberate behaviour changes, both improvements: `escapeHtml` now escapes quotes
+    (its call sites are attribute values), and `failedNames` comes out in target order
+    rather than whichever rejection landed first
+  - Left open: two pre-existing bugs surfaced by the pass, now in Bugs above
 
 - **Fable and Mythos model families** (v1.22.0)
   - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
