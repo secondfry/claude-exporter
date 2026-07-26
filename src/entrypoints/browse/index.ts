@@ -58,33 +58,33 @@ import {
 // DOM helpers
 // ---------------------------------------------------------------------------
 
-function el<T extends HTMLElement>(id: string): T | null {
+const el = <T extends HTMLElement>(id: string): T | null => {
   return document.getElementById(id) as T | null;
-}
+};
 
 /** For elements browse.html guarantees. Throws loudly if the markup drifts. */
-function req<T extends HTMLElement>(id: string): T {
+const req = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id) as T | null;
   if (!found) throw new Error(`browse.html is missing #${id}`);
   return found;
-}
+};
 
-function escapeHtml(str: string | null | undefined): string {
+const escapeHtml = (str: string | null | undefined): string => {
   if (!str) return '';
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-}
+};
 
-function errorMessage(error: unknown): string {
+const errorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
-}
+};
 
 // ---------------------------------------------------------------------------
 // Theme
 // ---------------------------------------------------------------------------
 
-function initTheme(): void {
+const initTheme = (): void => {
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme) {
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -97,15 +97,15 @@ function initTheme(): void {
       prefersDark ? 'dark' : 'light',
     );
   }
-}
+};
 
-function toggleTheme(): void {
+const toggleTheme = (): void => {
   const currentTheme =
     document.documentElement.getAttribute('data-theme') || 'dark';
   const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
-}
+};
 
 // ---------------------------------------------------------------------------
 // State
@@ -122,14 +122,14 @@ let timeFormat: '12h' | '24h' = '12h';
 let modelDisplay: 'current' | 'original' = 'original';
 
 /** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
-function asStatusFilter(value: string | undefined): StatusFilter {
+const asStatusFilter = (value: string | undefined): StatusFilter => {
   return value === 'new' || value === 'exported' || value === 'projects'
     ? value
     : 'all';
-}
+};
 
 /** Narrows a `.sortable` header's dataset value to SortField without an `as` assertion. */
-function asSortField(value: string | undefined): SortField | null {
+const asSortField = (value: string | undefined): SortField | null => {
   return value === 'name' ||
     value === 'project' ||
     value === 'created' ||
@@ -137,36 +137,36 @@ function asSortField(value: string | undefined): SortField | null {
     value === 'model'
     ? value
     : null;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Preferences
 // ---------------------------------------------------------------------------
 
-async function loadDateTimePrefs(): Promise<void> {
+const loadDateTimePrefs = async (): Promise<void> => {
   const result = await storageGet<{ dateFormat?: string; timeFormat?: string }>(
     'local',
     ['dateFormat', 'timeFormat'],
   );
   dateFormat = result.dateFormat === 'dmy' ? 'dmy' : 'mdy';
   timeFormat = result.timeFormat === '24h' ? '24h' : '12h';
-}
+};
 
-async function loadModelDisplayPref(): Promise<void> {
+const loadModelDisplayPref = async (): Promise<void> => {
   const result = await storageGet<{ modelDisplay?: string }>('local', [
     'modelDisplay',
   ]);
   modelDisplay = result.modelDisplay === 'current' ? 'current' : 'original';
-}
+};
 
-function formatDate(dt: Date): string {
+const formatDate = (dt: Date): string => {
   const m = dt.getMonth() + 1;
   const d = dt.getDate();
   const y = dt.getFullYear();
   return dateFormat === 'dmy' ? `${d}/${m}/${y}` : `${m}/${d}/${y}`;
-}
+};
 
-function formatTime(dt: Date): string {
+const formatTime = (dt: Date): string => {
   if (timeFormat === '24h') {
     return dt.toLocaleTimeString([], {
       hour: '2-digit',
@@ -179,7 +179,7 @@ function formatTime(dt: Date): string {
     hour12: true,
     minute: '2-digit',
   });
-}
+};
 
 // ---------------------------------------------------------------------------
 // Page lifecycle
@@ -220,16 +220,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadConversations();
 });
 
-async function hasClaudeAccessSafely(): Promise<boolean> {
+const hasClaudeAccessSafely = async (): Promise<boolean> => {
   try {
     return await hasClaudeAccess();
   } catch {
     // A browser that can't answer the question must not be blocked on it.
     return true;
   }
-}
+};
 
-function showPermissionNotice(): void {
+const showPermissionNotice = (): void => {
   const tableContent = req('tableContent');
   tableContent.innerHTML = '';
 
@@ -261,14 +261,14 @@ function showPermissionNotice(): void {
   wrapper.appendChild(button);
 
   tableContent.appendChild(wrapper);
-}
+};
 
 // ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
 // Load organization ID — auto-detect first, fall back to stored
-async function loadOrgId(): Promise<void> {
+const loadOrgId = async (): Promise<void> => {
   try {
     const detected = await detectOrgId();
     if (detected) {
@@ -290,9 +290,9 @@ async function loadOrgId(): Promise<void> {
       'Organization ID not configured. Please open a claude.ai tab and reload this page, or configure it manually in the extension options.',
     );
   }
-}
+};
 
-async function loadProjects(): Promise<void> {
+const loadProjects = async (): Promise<void> => {
   if (!orgId) return;
   try {
     const projects: Project[] = await fetchProjects(orgId);
@@ -306,9 +306,9 @@ async function loadProjects(): Promise<void> {
   } catch (error) {
     console.warn('Error loading projects:', error);
   }
-}
+};
 
-async function loadConversations(): Promise<void> {
+const loadConversations = async (): Promise<void> => {
   if (!orgId) return;
 
   try {
@@ -338,13 +338,13 @@ async function loadConversations(): Promise<void> {
     console.error('Error loading conversations:', error);
     showError(`Failed to load conversations: ${errorMessage(error)}`);
   }
-}
+};
 
 // ---------------------------------------------------------------------------
 // Table rendering
 // ---------------------------------------------------------------------------
 
-function displayConversations(): void {
+const displayConversations = (): void => {
   const tableContent = req('tableContent');
   const view = list.view();
 
@@ -470,7 +470,7 @@ function displayConversations(): void {
 
   const exportAllBtn = el<HTMLButtonElement>('exportAllBtn');
   if (exportAllBtn) exportAllBtn.disabled = false;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Selection
@@ -484,7 +484,7 @@ function displayConversations(): void {
 // potentially thousands of rows on every single click. The list's state is
 // already updated by this point, so just paint that state onto the existing
 // DOM nodes.
-function syncSelectionDom(): void {
+const syncSelectionDom = (): void => {
   document
     .querySelectorAll<HTMLInputElement>('.conversation-checkbox')
     .forEach((checkbox) => {
@@ -494,9 +494,9 @@ function syncSelectionDom(): void {
 
   const selectAllCheckbox = el<HTMLInputElement>('selectAll');
   if (selectAllCheckbox) selectAllCheckbox.checked = list.allViewSelected();
-}
+};
 
-function handleCheckboxChange(e: MouseEvent): void {
+const handleCheckboxChange = (e: MouseEvent): void => {
   if (!(e.currentTarget instanceof HTMLInputElement)) return;
   const checkbox = e.currentTarget;
   const conversationId = checkbox.dataset.id;
@@ -507,45 +507,45 @@ function handleCheckboxChange(e: MouseEvent): void {
 
   syncSelectionDom();
   updateExportButtonText();
-}
+};
 
-function handleSelectAll(e: Event): void {
+const handleSelectAll = (e: Event): void => {
   if (!(e.currentTarget instanceof HTMLInputElement)) return;
 
   list.checkAll(e.currentTarget.checked);
 
   syncSelectionDom();
   updateExportButtonText();
-}
+};
 
-function updateExportButtonText(): void {
+const updateExportButtonText = (): void => {
   const exportBtn = el<HTMLButtonElement>('exportAllBtn');
   if (!exportBtn) return;
 
   const count = list.selectedCount();
   exportBtn.textContent =
     count > 0 ? `Export Selected (${count})` : 'Export All';
-}
+};
 
-function updateStats(): void {
+const updateStats = (): void => {
   const stats = el('stats');
   if (!stats) return;
   stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.staleCount()} new/updated)`;
-}
+};
 
-function autoSelectNewUpdated(): void {
+const autoSelectNewUpdated = (): void => {
   // Only the Selection changes here, not the View — same in-place treatment
   // as handleCheckboxChange/handleSelectAll.
   list.selectStale();
   syncSelectionDom();
   updateExportButtonText();
-}
+};
 
 // ---------------------------------------------------------------------------
 // Export — options gathering, progress modal, Export Records
 // ---------------------------------------------------------------------------
 
-function readExportOptions(): ExportOptions {
+const readExportOptions = (): ExportOptions => {
   return {
     artifactFormat: req<HTMLSelectElement>('artifactFormat').value,
     extractArtifacts: req<HTMLInputElement>('extractArtifacts').checked,
@@ -556,7 +556,7 @@ function readExportOptions(): ExportOptions {
     includeMetadata: req<HTMLInputElement>('includeMetadata').checked,
     includeThinking: req<HTMLInputElement>('includeThinking').checked,
   };
-}
+};
 
 interface ProgressModal {
   dispose(): void;
@@ -566,7 +566,7 @@ interface ProgressModal {
 }
 
 /** Drives #progressModal and wires #cancelExport to an AbortController. */
-function openProgressModal(initialText: string): ProgressModal {
+const openProgressModal = (initialText: string): ProgressModal => {
   const modal = req('progressModal');
   const bar = req('progressBar');
   const text = req('progressText');
@@ -610,21 +610,21 @@ function openProgressModal(initialText: string): ProgressModal {
       stats.textContent = `${progress.completed} succeeded, ${progress.failed} failed out of ${progress.total}`;
     },
   };
-}
+};
 
-function isAbort(error: unknown): boolean {
+const isAbort = (error: unknown): boolean => {
   return error instanceof DOMException && error.name === 'AbortError';
-}
+};
 
 /** Apply a freshly-loaded Export Record book and repaint the table's staleness state. */
-function applyExportRecords(book: ExportRecordBook): void {
+const applyExportRecords = (book: ExportRecordBook): void => {
   list.setExportRecords(book);
   displayConversations();
   updateStats();
-}
+};
 
 /** The per-row Export button. */
-async function exportSingle(target: ExportTarget): Promise<void> {
+const exportSingle = async (target: ExportTarget): Promise<void> => {
   if (!orgId) {
     showToast('Organization ID not configured', true);
     return;
@@ -653,10 +653,10 @@ async function exportSingle(target: ExportTarget): Promise<void> {
     console.error('Export error:', error);
     showToast(`Failed to export: ${errorMessage(error)}`, true);
   }
-}
+};
 
 /** The "Export All" / "Export Selected (N)" button. */
-async function exportAllFiltered(): Promise<void> {
+const exportAllFiltered = async (): Promise<void> => {
   if (!orgId) {
     showToast('Organization ID not configured', true);
     return;
@@ -749,22 +749,22 @@ async function exportAllFiltered(): Promise<void> {
     button.disabled = false;
     button.textContent = originalButtonText;
   }
-}
+};
 
 // ---------------------------------------------------------------------------
 // Messaging
 // ---------------------------------------------------------------------------
 
-function showError(message: string): void {
+const showError = (message: string): void => {
   const tableContent = req('tableContent');
   const errorDiv = document.createElement('div');
   errorDiv.className = 'error';
   errorDiv.textContent = message;
   tableContent.innerHTML = '';
   tableContent.appendChild(errorDiv);
-}
+};
 
-function showToast(message: string, isError = false): void {
+const showToast = (message: string, isError = false): void => {
   const toast = el('toast');
   if (!toast) return;
   toast.textContent = message;
@@ -774,13 +774,13 @@ function showToast(message: string, isError = false): void {
   setTimeout(() => {
     toast.classList.remove('show');
   }, 3000);
-}
+};
 
 // ---------------------------------------------------------------------------
 // Event wiring
 // ---------------------------------------------------------------------------
 
-function setupEventListeners(): void {
+const setupEventListeners = (): void => {
   // Handle checkbox dependencies
   const includeChatsCheckbox = req<HTMLInputElement>('includeChats');
   const includeThinkingCheckbox = req<HTMLInputElement>('includeThinking');
@@ -980,6 +980,6 @@ function setupEventListeners(): void {
   req('exportAllBtn').addEventListener('click', () => {
     void exportAllFiltered();
   });
-}
+};
 
 export {};
