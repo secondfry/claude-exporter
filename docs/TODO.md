@@ -29,27 +29,18 @@
 
 ### High Priority 🟠
 
-- **Two temporary blocks at the bottom of `eslint.config.ts`** — both downgrade
-  real rules to warnings so the lint gate could be turned on at all, and both are
-  meant to be deleted, not adjusted.
+- **One temporary block remains at the bottom of `eslint.config.ts`** — it
+  downgrades real rules to warnings so the lint gate could be turned on at all,
+  and it is meant to be deleted, not adjusted.
 
-  1. _Arrow functions._ `no-restricted-syntax` bans `function` declarations and
-     expressions, with no autofixer. `src/features/**` and `src/platform/**` are
-     converted (126 sites). 58 remain, all in `entrypoints/browse/index.ts` (33),
-     the other entrypoints (24) and `manifest.config.ts` (1). One site will never
-     convert: `features/tracking/index.ts` has a `get size()` accessor, which has
-     no arrow form — the selector exempts method shorthands but not getters, and
-     wants `[kind='get']` added to its `:not(...)` list. ESLint severity is
-     per-rule rather than per-selector, so the whole rule sits at `warn` until the
-     entrypoint conversion lands and the selector gap is closed.
-  2. _`recommendedTypeChecked` findings._ 78 pre-existing errors, mostly
-     `no-misused-promises` (17, async handlers passed to `addEventListener`),
-     `require-await` (15) and the `no-unsafe-*` family (~30, `any` escaping from
-     DOM lookups and message responses). The `no-unsafe-*` ones overlap the DOM
-     type-assertion item below and want the same fix — a real guard at the call
-     site, never an assertion. Worst offenders: `features/artifacts/index.ts`
-     (22), `entrypoints/options/index.ts` (12), `features/models/index.spec.ts`
-     (12), `entrypoints/browse/index.ts` (8).
+  _`recommendedTypeChecked` findings._ 77 pre-existing errors, mostly
+  `no-misused-promises` (17, async handlers passed to `addEventListener`),
+  `require-await` (15) and the `no-unsafe-*` family (29, `any` escaping from
+  DOM lookups and message responses). The `no-unsafe-*` ones overlap the DOM
+  type-assertion item below and want the same fix — a real guard at the call
+  site, never an assertion. Worst offenders: `features/artifacts/index.ts`
+  (22), `entrypoints/options/index.ts` (12), `features/models/index.spec.ts`
+  (12), `entrypoints/browse/index.ts` (8).
 
 - **`eslint-plugin-tsconfig-paths` is registered but its rule is off** — it cannot
   be adopted as written. It rewrites _every_ relative import including siblings,

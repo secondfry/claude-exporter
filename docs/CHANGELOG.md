@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.0]
+
+**The one-function-form rule is now enforced.** No behaviour changes; the conversion is syntactic.
+
+- The last 66 `function` declarations became `const … = () =>`: all of `src/entrypoints/**` (browse 33, background 3, content 6, options 6, popup 6, popup/theme 3), plus `vite.config.ts` (5), `vitest.setup.ts` (2) and `manifest.config.ts` (1). Names and signatures are unchanged, so every `export { … }` block and spec still refers to the same bindings.
+- Nothing needed reordering, and this was the tree where it could have gone wrong. Arrows are not hoisted, and unlike `features/`, entrypoints do run code at load. But every load-time statement in them is either a listener registration whose callback fires later (`DOMContentLoaded`, `pageshow`, click handlers) or — in `options/index.ts` and `content/index.ts` — a direct call to a helper that already sat above it. The build config is the same story: every plugin factory is reached only from the `defineConfig` callback.
+- The rule's selector now exempts `Property[kind='get']` and `[kind='set']`. ESTree marks an accessor `method: false`, so the method-shorthand exemption never covered it, and the `get size()` on the Export Record book was being reported with no legal fix — a getter has no arrow form, and computing it eagerly would change when it evaluates. `features/tracking` is unchanged.
+- The temporary severity downgrade for the two arrow selectors is deleted; `no-restricted-syntax` is back to `error` as originally specified. The separate `recommendedTypeChecked` downgrade (77 findings) stays.
+
 ## [1.18.1]
 
 **`features/` and `platform/` now use arrow functions only.** No behaviour changes; the conversion is syntactic.
