@@ -25,38 +25,38 @@ interface BackupOutcome {
 
 type ImportMode = 'merge' | 'replace';
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+};
 
-function isImportMode(value: unknown): value is ImportMode {
+const isImportMode = (value: unknown): value is ImportMode => {
   return value === 'merge' || value === 'replace';
-}
+};
 
 /**
  * A backup file as written by backupExtensionData. Validated rather than
  * asserted: this is a file the user picked off disk, so it is the least
  * trustworthy input in the extension.
  */
-function isBackupFile(value: unknown): value is BackupFile {
+const isBackupFile = (value: unknown): value is BackupFile => {
   if (!isPlainObject(value)) return false;
   const meta = value._meta;
   if (!isPlainObject(meta) || meta.app !== 'claude-exporter') return false;
   return isPlainObject(value.local);
-}
+};
 
-function countEntries(value: unknown): number {
+const countEntries = (value: unknown): number => {
   return isPlainObject(value) ? Object.keys(value).length : 0;
-}
+};
 
-function timestampSuffix(now: Date): string {
+const timestampSuffix = (now: Date): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
   const ymd = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
   const hms = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   return `${ymd}-${hms}`;
-}
+};
 
-function downloadJson(filename: string, payload: unknown): void {
+const downloadJson = (filename: string, payload: unknown): void => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: 'application/json',
   });
@@ -68,10 +68,10 @@ function downloadJson(filename: string, payload: unknown): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
+};
 
 // Download all extension storage (local + sync) as a structured JSON file.
-async function backupExtensionData(): Promise<BackupOutcome> {
+const backupExtensionData = async (): Promise<BackupOutcome> => {
   try {
     const local = await storageGet<Record<string, unknown>>('local', null);
     const sync = await storageGet<Record<string, unknown>>('sync', null);
@@ -101,17 +101,17 @@ async function backupExtensionData(): Promise<BackupOutcome> {
       success: false,
     };
   }
-}
+};
 
 // Conservative merge: for each top-level key in `backup`, if the key is absent
 // locally, copy it over; if both sides are plain objects (UUID-keyed records
 // like exportTimestamps / modelSnapshots), merge their sub-keys with local
 // winning on overlap. Scalar conflicts (org ID, date format, etc.) keep the
 // local value untouched.
-function mergeStorageData(
+const mergeStorageData = (
   current: Record<string, unknown>,
   backup: Record<string, unknown>,
-): Record<string, unknown> {
+): Record<string, unknown> => {
   const result: Record<string, unknown> = { ...current };
   for (const [key, backupVal] of Object.entries(backup || {})) {
     const currentVal = current[key];
@@ -123,12 +123,12 @@ function mergeStorageData(
     // else: scalar conflict — current value is already in result, keep it
   }
   return result;
-}
+};
 
 // Show a modal letting the user choose merge vs replace BEFORE the OS file
 // picker opens. Resolves with the chosen mode, or null on Cancel / Esc /
 // overlay click. The caller opens the file picker on a non-null mode.
-function showImportModeModal(): Promise<ImportMode | null> {
+const showImportModeModal = (): Promise<ImportMode | null> => {
   return new Promise((resolve) => {
     if (!document.getElementById('claude-exporter-modal-styles')) {
       const style = document.createElement('style');
@@ -260,16 +260,16 @@ function showImportModeModal(): Promise<ImportMode | null> {
     const firstRadio = overlay.querySelector('input[name="ce-import-mode"]');
     if (firstRadio instanceof HTMLInputElement) firstRadio.focus();
   });
-}
+};
 
 // Import extension storage from a file produced by backupExtensionData.
 // Validates the file, then writes to local + sync using the supplied mode.
 // The mode choice is made BEFORE the file picker opens (see
 // showImportModeModal), so this function just executes.
-async function importBackup(
+const importBackup = async (
   file: File,
   mode: ImportMode,
-): Promise<BackupOutcome> {
+): Promise<BackupOutcome> => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
@@ -324,7 +324,7 @@ async function importBackup(
       success: false,
     };
   }
-}
+};
 
 export {
   backupExtensionData,

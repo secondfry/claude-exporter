@@ -17,9 +17,9 @@ const CE_UUID_REGEX =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const CE_ERROR_LOG_MAX = 50;
 
-function sanitizeForDiagnostics(value: string): string {
+const sanitizeForDiagnostics = (value: string): string => {
   return value.replace(CE_UUID_REGEX, '<id>');
-}
+};
 
 interface ErrorLogEntry {
   col?: number | null;
@@ -37,7 +37,7 @@ interface DiagnosticsOutcome {
   success: boolean;
 }
 
-function isErrorLogEntry(value: unknown): value is ErrorLogEntry {
+const isErrorLogEntry = (value: unknown): value is ErrorLogEntry => {
   if (value === null || typeof value !== 'object') return false;
   return (
     'ts' in value &&
@@ -45,30 +45,30 @@ function isErrorLogEntry(value: unknown): value is ErrorLogEntry {
     'msg' in value &&
     typeof value.msg === 'string'
   );
-}
+};
 
-function readErrorLog(stored: unknown): ErrorLogEntry[] {
+const readErrorLog = (stored: unknown): ErrorLogEntry[] => {
   return Array.isArray(stored) ? stored.filter(isErrorLogEntry) : [];
-}
+};
 
-function countEntries(value: unknown): number {
+const countEntries = (value: unknown): number => {
   return value !== null && typeof value === 'object'
     ? Object.keys(value).length
     : 0;
-}
+};
 
 /** A stack or filename that may be absent; sanitized only when present. */
-function sanitizeOptional(value: unknown): string | null {
+const sanitizeOptional = (value: unknown): string | null => {
   return typeof value === 'string' && value
     ? sanitizeForDiagnostics(value)
     : null;
-}
+};
 
 interface ErrorLogStorage extends Record<string, unknown> {
   errorLog?: unknown;
 }
 
-function initErrorCapture(context?: string): void {
+const initErrorCapture = (context?: string): void => {
   // Re-entry guard: if our own push() throws, don't loop into the listener.
   let suppressed = false;
 
@@ -126,7 +126,7 @@ function initErrorCapture(context?: string): void {
       });
     },
   );
-}
+};
 
 interface DiagnosticsStorage extends Record<string, unknown> {
   dateFormat?: unknown;
@@ -138,7 +138,7 @@ interface DiagnosticsStorage extends Record<string, unknown> {
 }
 
 // Build a sanitized diagnostics bundle and trigger a download.
-async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
+const generateDiagnostics = async (): Promise<DiagnosticsOutcome> => {
   try {
     const local = await storageGet<DiagnosticsStorage>('local', [
       'errorLog',
@@ -210,7 +210,7 @@ async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
       success: false,
     };
   }
-}
+};
 
 export {
   CE_ERROR_LOG_MAX,

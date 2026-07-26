@@ -57,27 +57,27 @@ interface ModelDisplayBook {
 // still runs, and only the caller of the rejected task sees its rejection.
 let queue: Promise<unknown> = Promise.resolve();
 
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
+const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
   const result = queue.then(task, task);
   queue = result;
   return result;
-}
+};
 
-async function readExportRecords(): Promise<ExportRecords> {
+const readExportRecords = async (): Promise<ExportRecords> => {
   const result = await storageGet<{ exportTimestamps?: ExportRecords }>(
     'local',
     ['exportTimestamps'],
   );
   return result.exportTimestamps || {};
-}
+};
 
-async function readModelSnapshots(): Promise<ModelSnapshots> {
+const readModelSnapshots = async (): Promise<ModelSnapshots> => {
   const result = await storageGet<{ modelSnapshots?: ModelSnapshots }>(
     'local',
     ['modelSnapshots'],
   );
   return result.modelSnapshots || {};
-}
+};
 
 // A conversation is stale (new/updated since last export) when it has never
 // been exported, or its `updated_at` is later than its Export Record.
@@ -85,20 +85,23 @@ async function readModelSnapshots(): Promise<ModelSnapshots> {
 // browse/index.js#isNewOrUpdated (line 149-153): a Date comparison, not a
 // string comparison, and strictly-later (`>`), so an export recorded at the
 // exact same instant as `updated_at` does NOT count as stale.
-function isStale(conv: ConversationSummary, records: ExportRecords): boolean {
+const isStale = (
+  conv: ConversationSummary,
+  records: ExportRecords,
+): boolean => {
   const lastExport = records[conv.uuid];
   if (!lastExport) return true; // Never exported
   return new Date(conv.updated_at) > new Date(lastExport);
-}
+};
 
 // Resolve which model to show for a conversation. Honors the `preference`
 // ('original' = first-seen, or 'current'). When the chat has been bounced
 // (current differs from first-seen), `bounced` is true.
-function getDisplayModel(
+const getDisplayModel = (
   conv: ConversationSummary,
   snapshots: ModelSnapshots,
   preference: ModelPreference,
-): { bounced: boolean; model: string; other: string } {
+): { bounced: boolean; model: string; other: string } => {
   const snap = snapshots[conv.uuid];
   if (snap && snap.firstSeen) {
     const original = snap.firstSeen;
@@ -111,9 +114,9 @@ function getDisplayModel(
     };
   }
   return { bounced: false, model: conv.model || '', other: '' };
-}
+};
 
-function makeExportRecordBook(records: ExportRecords): ExportRecordBook {
+const makeExportRecordBook = (records: ExportRecords): ExportRecordBook => {
   return {
     isStale(conv) {
       return isStale(conv, records);
@@ -129,12 +132,12 @@ function makeExportRecordBook(records: ExportRecords): ExportRecordBook {
       return count;
     },
   };
-}
+};
 
-function makeModelDisplayBook(
+const makeModelDisplayBook = (
   snapshots: ModelSnapshots,
   preference: ModelPreference,
-): ModelDisplayBook {
+): ModelDisplayBook => {
   return {
     display(conv) {
       const { bounced, model, other } = getDisplayModel(
@@ -150,23 +153,23 @@ function makeModelDisplayBook(
       return { bounced, model, other, otherLabel };
     },
   };
-}
+};
 
-async function loadExportRecords(): Promise<ExportRecordBook> {
+const loadExportRecords = async (): Promise<ExportRecordBook> => {
   return enqueue(async () => makeExportRecordBook(await readExportRecords()));
-}
+};
 
-function emptyExportRecords(): ExportRecordBook {
+const emptyExportRecords = (): ExportRecordBook => {
   return makeExportRecordBook({});
-}
+};
 
 // Writes an Export Record: the user got a file. Returns the post-write book
 // so callers never re-read and never own invalidation. Short-circuits
 // without writing when `uuids` is empty.
-async function recordExports(
+const recordExports = async (
   uuids: readonly string[],
   at: string = new Date().toISOString(),
-): Promise<ExportRecordBook> {
+): Promise<ExportRecordBook> => {
   return enqueue(async () => {
     if (uuids.length === 0) {
       return makeExportRecordBook(await readExportRecords());
@@ -178,44 +181,44 @@ async function recordExports(
     await storageSet('local', { exportTimestamps: records });
     return makeExportRecordBook(records);
   });
-}
+};
 
 // The user's manual "mark as exported" override — no file was produced here.
 // This is distinct from recordExports (a real Export happened): CONTEXT.md
 // defines an Export Record as "the user got a file", which is not strictly
 // true for a manual mark, but the extension has no separate concept for it,
 // so it shares recordExports' implementation and merge semantics.
-async function markExported(
+const markExported = async (
   uuids: readonly string[],
-): Promise<ExportRecordBook> {
+): Promise<ExportRecordBook> => {
   return recordExports(uuids);
-}
+};
 
-async function clearExportRecords(): Promise<ExportRecordBook> {
+const clearExportRecords = async (): Promise<ExportRecordBook> => {
   return enqueue(async () => {
     await storageSet('local', { exportTimestamps: {} });
     return makeExportRecordBook({});
   });
-}
+};
 
-async function loadModelDisplay(
+const loadModelDisplay = async (
   preference: ModelPreference,
-): Promise<ModelDisplayBook> {
+): Promise<ModelDisplayBook> => {
   return enqueue(async () =>
     makeModelDisplayBook(await readModelSnapshots(), preference),
   );
-}
+};
 
-function emptyModelDisplay(preference: ModelPreference): ModelDisplayBook {
+const emptyModelDisplay = (preference: ModelPreference): ModelDisplayBook => {
   return makeModelDisplayBook({}, preference);
-}
+};
 
 // Snapshot each conversation's current model so it survives a model bounce
 // (e.g. when a model retires and Claude silently moves old chats onto a new
 // one). Only the raw API model is recorded — never an inferred guess.
-async function recordModelSnapshots(
+const recordModelSnapshots = async (
   conversations: ConversationSummary[],
-): Promise<void> {
+): Promise<void> => {
   return enqueue(async () => {
     if (!Array.isArray(conversations)) return;
 
@@ -251,7 +254,7 @@ async function recordModelSnapshots(
       await storageSet('local', { modelSnapshots: snapshots });
     }
   });
-}
+};
 
 export {
   clearExportRecords,

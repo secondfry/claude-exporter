@@ -17,10 +17,10 @@ interface BackupShape {
   sync: Record<string, unknown>;
 }
 
-function makeBackup(overrides?: {
+const makeBackup = (overrides?: {
   local?: Record<string, unknown>;
   sync?: Record<string, unknown>;
-}): BackupShape {
+}): BackupShape => {
   return {
     _meta: {
       app: 'claude-exporter',
@@ -34,13 +34,13 @@ function makeBackup(overrides?: {
     },
     sync: overrides?.sync ?? { organizationId: 'org-1' },
   };
-}
+};
 
-function fileFor(payload: unknown): File {
+const fileFor = (payload: unknown): File => {
   return new File([JSON.stringify(payload)], 'b.json', {
     type: 'application/json',
   });
-}
+};
 
 // NOTE: the original 54-test suite (copied verbatim into every feature's
 // index.spec.js before this split) contained zero tests for the backup

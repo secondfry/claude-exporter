@@ -18,11 +18,11 @@ import {
   recordModelSnapshots,
 } from './index';
 
-function conv(
+const conv = (
   uuid: string,
   updatedAt: string,
   model: string | null = null,
-): ConversationSummary {
+): ConversationSummary => {
   return {
     created_at: '2026-01-01T00:00:00.000Z',
     model,
@@ -30,7 +30,7 @@ function conv(
     updated_at: updatedAt,
     uuid,
   };
-}
+};
 
 describe('tracking', () => {
   describe('loadExportRecords / ExportRecordBook', () => {
