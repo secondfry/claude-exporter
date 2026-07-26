@@ -1,11 +1,14 @@
 # Claude Exporter - Development Guide
 
-## Communication Style
+> **Migration in progress.** This file describes the target structure agreed in
+> [ADR-0001](docs/adr/0001-single-typescript-source-tree.md) and [ADR-0002](docs/adr/0002-chat-cache-in-indexeddb.md).
+> Until the restructure commit lands, the tree on disk is still the legacy
+> `chrome/` + `firefox/` layout. Delete this note once `src/` exists.
 
-- Narrate what you're doing at each step — brief status updates help the user follow along and make the chat searchable
-- Be patient with tangents and context-switching (ADHD-friendly pacing)
-- Keep explanations concise but don't skip them
-- **Scope guard:** Gently remind the user when a tangent is pulling away from the current task. User tends to spiral into feature ideas mid-implementation — help stay focused on finishing the current thing before starting the next. A quick "want to add that to TODO and finish X first?" goes a long way.
+## Domain Documentation
+
+- **[CONTEXT.md](CONTEXT.md)** — the glossary. Use these terms exactly; they are load-bearing. In particular **Export Record** (the user got a file) and **Chat Cache** (we hold the bytes) are independent concepts, and "exported" is ambiguous between them
+- **[docs/adr/](docs/adr/)** — architectural decisions and, more usefully, the alternatives that were rejected and why. Read before proposing to change the build, the storage layer, or the browser targets
 
 ## Self-Maintenance
 
@@ -17,102 +20,135 @@ This file is the shared project memory. **Update it proactively** when:
 
 Keep it concise. Don't duplicate what's already here — update existing sections instead.
 
-**This file exists in two places:** the workspace root (read by Claude Code) and `src/CLAUDE.md` (tracked in git). When updating, update both copies.
+There is **one copy** of this file, at the repo root. (Older revisions claimed a second copy under `src/`; there has never been a `src/CLAUDE.md` in this repo.)
 
 ## Project Structure
-- Extension source and git repo lives in `src/`
-- Parallel Chrome (`src/chrome/`) and Firefox (`src/firefox/`) versions — nearly identical copies
-- Chrome uses Manifest V3, Firefox uses Manifest V2
-- Releases go in `releases/vX.Y.Z/`
 
-## Key Files (under `src/chrome/` and `src/firefox/`)
-- `content.js` — Content script injected on claude.ai pages (handles API calls, popup export actions)
-- `utils.js` — Shared utilities (convertToMarkdown, convertToText, downloadFile, extractArtifactFiles, etc.)
-- `browse.js` — Browse page logic (filtering, sorting, has its own export functions, always ZIPs)
-- `background.js` — Re-injects content scripts on install/update
-- `jszip.min.js` — ZIP library
-- `popup.html` / `popup.js` — Extension popup UI and logic
-- `browse.html` — Browse/search conversations page
+The repo root *is* the extension project — there is no wrapper directory.
+
+```
+/
+├── CLAUDE.md, CONTEXT.md, README.md, LICENSE.md
+├── docs/            TODO.md, CHANGELOG.md, INSTALL.md, adr/
+├── src/
+│   ├── entrypoints/ popup/ browse/ content/ background/ options/
+│   ├── features/    conversation/ rendering/ artifacts/ export/
+│   │                cache/ tracking/ backup/ diagnostics/
+│   ├── platform/    browser-API adapter — the ONLY place browser differences live
+│   └── manifest.chrome.ts, manifest.firefox.ts
+├── dist/            build output — gitignored
+│   ├── chrome/      MV3
+│   └── firefox/     MV3
+├── releases/        vX.Y.Z/*.zip — gitignored, built artifacts
+├── package.json, vite.config.ts, tsconfig.json
+```
+
+**Entrypoints are thin.** They wire up UI and call into `features/`. Business logic lives in `features/`; anything an entrypoint needs twice belongs in a feature module.
+
+**There is no `shared/` or `utils/`.** Those names have no admission criteria and are how the old 1,065-line `utils.js` happened. If something doesn't fit an existing feature, it needs a new one.
+
+## Build & Tooling
+
+- **TypeScript** (`.ts`, not JSDoc), bundled by **Vite/Rollup** into `dist/chrome/` and `dist/firefox/`
+- Both targets are **Manifest V3**. Chrome uses `background.service_worker`; Firefox uses an event page (`background.scripts`) — this is a manifest difference only, the background code is identical
+- Manifests are generated from `.ts` sources, so `manifest_version`, the background key, the gecko block, and the per-branch extension name are build variables, never manual edits
+- `jszip` is an npm dependency, not a vendored `jszip.min.js`
+- Content scripts must build as **IIFE** bundles (no ESM in content script context). Extension pages may use ESM
+
+## Code Style
+
+- **Never use inline `export`.** Declarations stay bare; each file ends with a single `export { ... }` block
+- TypeScript everywhere. No `.js` source files
+
+## Testing
+
+- **Vitest.** Tests are colocated with sources as `*.spec.ts` — no separate `tests/` directory
+- Run from the repo root: `npm test` (one-shot) or `npm run test:watch`
+- Because there is now one source tree, a tested module is tested for both browsers. The old "`firefox/utils.js` is a mirror the tests don't cover" gap is gone — do not reintroduce a parallel tree
+- `node_modules/`, `dist/`, `releases/` and `package-lock.json` are gitignored and are never part of release ZIPs
 
 ## Git & Commits
 
 **Auto-commit after every completed change.** Don't wait for the user to ask. After finishing a task (bug fix, feature, refactor), commit immediately with a clear message.
 
-- Git repo is in `src/` — always `cd` there for git commands
-- Write concise, descriptive commit messages: `Fix bulk export to always ZIP instead of individual downloads`
+- The git repo is the repo root — no `cd` needed
+- Write concise, descriptive commit messages focused on **why**, not which files moved
 - Not: `wip`, `fix stuff`, `update`, `final FINAL (1)`
-- Group related changes into one commit (e.g., Chrome + Firefox changes for the same fix = one commit)
+- Group related changes into one commit
 - Don't push unless asked
-- **Branching**: Do all development on `testing` branch. Merge to `main` only when creating a release
+- **Branching**: Do all development on `testing`. Merge to `main` only when creating a release
+
+### Preserving history across moves
+
+Git has no copy command; file history is reconstructed by rename/copy detection at read time. So:
+
+- Use `git mv` for one-to-one moves
+- **Never mix a move with a content change in the same commit.** Move (or copy) in one commit, rewrite in the next — otherwise detection fails and the trail is lost
+- For files split into several modules, recover history with `git blame -C -C -C` and `git log --find-copies-harder`
 
 ## Documentation Upkeep
 
 **After each commit**, update these files:
 
-- **`src/docs/TODO.md`** — Move completed items to the Completed section, update the current version number, clean up any stale entries
-- **`src/docs/CHANGELOG.md`** — Append a short entry under the current version. Create the file if it doesn't exist. Format: `## [X.Y.Z]` header, then bullet points describing changes. Keep entries concise — one line per change is fine
+- **`docs/TODO.md`** — Move completed items to the Completed section, update the current version number, clean up any stale entries
+- **`docs/CHANGELOG.md`** — Append a short entry under the current version. Format: `## [X.Y.Z]` header, then bullet points. One line per change is fine
 - The CHANGELOG doubles as store update notes. All changes between the current version and the last `_Published_` marker are what goes into the store listing update
 
 ## Release Process
 
 **Only create releases when explicitly asked.** Never auto-release.
 
-When the user asks to create a release for version X.Y.Z:
+A release now **requires running the build** — `dist/` is the artifact, not the source tree.
 
-1. **Verify version** — Confirm both `chrome/manifest.json` and `firefox/manifest.json` show the correct version
-2. **Create release directory** — `mkdir -p releases/vX.Y.Z`
-3. **ZIP Chrome extension** — `cd src/chrome && zip -r ../../releases/vX.Y.Z/claude-exporter-chrome.zip ./*`
-4. **ZIP Firefox extension** — `cd src/firefox && zip -r ../../releases/vX.Y.Z/claude-exporter-firefox.zip ./*` (unsigned; user handles .xpi signing via AMO)
-5. **Git tag** — `cd src && git tag vX.Y.Z -m "Release vX.Y.Z"`
-6. **Push tag** — `git push origin vX.Y.Z`
-7. **Create GitHub release** — `gh release create vX.Y.Z ../releases/vX.Y.Z/* --title "vX.Y.Z" --notes "$(changelog excerpt from docs/CHANGELOG.md)"` — use all changes since last `_Published_` marker as the notes
-8. **Mark as published** — Add `_Published_` line after the released version's entries in docs/CHANGELOG.md, commit
+1. **Verify version** — bump `version` in `package.json`; both manifests derive from it
+2. **Build** — `npm run build` produces `dist/chrome/` and `dist/firefox/`
+3. **Verify the built manifests** — correct version, and the name has no "Beta" suffix on `main`
+4. **Create release directory** — `mkdir -p releases/vX.Y.Z`
+5. **ZIP each target** — zip the *contents* of `dist/chrome/` and `dist/firefox/` (Firefox unsigned; user handles .xpi signing via AMO)
+6. **Git tag** — `git tag vX.Y.Z -m "Release vX.Y.Z"`
+7. **Push tag** — `git push origin vX.Y.Z`
+8. **Create GitHub release** — `gh release create vX.Y.Z releases/vX.Y.Z/* --title "vX.Y.Z" --notes "..."` — notes are all changes since the last `_Published_` marker
+9. **Mark as published** — add `_Published_` after the released version's entries in `docs/CHANGELOG.md`, commit
 
 ## Critical Rules
 
-### Always apply changes to BOTH browsers
-Every code change to `chrome/` must also be applied to `firefox/`. The files are nearly identical — differences are only in manifest format and API calls (`chrome.scripting.executeScript` vs `chrome.tabs.executeScript`).
+### Browser differences live in `platform/` only
+There is one source tree. Chrome/Firefox divergence is confined to `src/platform/` and the two manifest templates. Never fork a feature module per browser, and never reintroduce parallel `chrome/` + `firefox/` source trees — hand-syncing them was the single largest source of drift bugs in this project's history.
 
-### Always bump version on every change
-Update `"version"` in BOTH `chrome/manifest.json` AND `firefox/manifest.json`.
+### Always bump the version on every change
+Update `version` in `package.json` (the single source; manifests derive from it).
 
-### background.js must inject ALL content scripts
-When re-injecting into already-open tabs (on install/update), background.js must inject all three files: `jszip.min.js`, `utils.js`, AND `content.js`. Injecting only `content.js` causes "JSZip is not defined" / "downloadFile is not defined" / "extractArtifactFiles is not defined" errors on already-open tabs.
+### background must inject ALL content script bundles
+When re-injecting into already-open tabs on install/update, background must inject every content-script bundle the manifest declares. Injecting only some of them causes `X is not defined` errors on already-open tabs. If the build's content-script output changes, update the injection list.
 
 ### Multi-file exports must always be ZIPped
-Any export producing more than one file should always create a ZIP — never trigger individual browser downloads.
+Any export producing more than one file always creates a ZIP — never trigger individual browser downloads.
 
-### Manifest name differs by branch
+### Extension name differs by branch
+The extension name must be `Claude Exporter` on `main` and `Claude Exporter Beta` on `testing`, so the user can tell at a glance which build is loaded. This is a build variable — do not edit manifests by hand. The popup header reads it from the manifest (`#header-title` in `popup.js`), so it follows automatically.
 
-`"name"` in BOTH manifests must be:
-
-- `"Claude Exporter"` on the `main` branch (released version)
-- `"Claude Exporter Beta"` on the `testing` branch (so the user can tell at a glance which build is loaded)
-
-The popup header title is populated from `manifest.name` in `popup.js` (`#header-title`), so the popup automatically reads "Claude Exporter Beta" on the testing branch — no separate HTML edit needed.
-
-When merging `testing` → `main` for a release, flip both manifest names to drop "Beta" as part of the merge.
-
-## Testing
-
-- **Vitest** test harness (`package.json` + `node_modules/`) lives in `src/tests/`. Run tests with `npm test` (one-shot) or `npm run test:watch` (watch mode) from `src/tests/`.
-- Test files live in `src/tests/` and import from `src/chrome/utils.js` (the canonical copy).
-- `firefox/utils.js` is a mirror — if it drifts from `chrome/utils.js`, the tests won't catch it. Keep them in sync per the existing rule.
-- `utils.js` has a conditional `module.exports` block at the bottom that fires only when `module` is defined (Node/vitest). Browser extensions ignore it because the global is undefined.
-- `node_modules/` and `package-lock.json` are gitignored (`package.json` is tracked under `src/tests/`). None are part of the release ZIPs.
+### The Chat Cache is never migrated
+Any change to the cache schema, or to the export request's query string, drops the object store. See [ADR-0002](docs/adr/0002-chat-cache-in-indexeddb.md) — migration code here has a best case identical to `clear()` and a worst case of silently exporting stale data.
 
 ## Architecture Notes
 
 ### Content Script Injection
-- On fresh page loads: manifest `content_scripts` handles injection of all three JS files
-- On extension install/update: `background.js` re-injects into already-open claude.ai tabs
-- `content.js` has a double-injection guard (`window.claudeExporterContentScriptLoaded`) to prevent duplicate message listeners
+- On fresh page loads: manifest `content_scripts` handles injection
+- On extension install/update: background re-injects into already-open claude.ai tabs
+- The content script has a double-injection guard (`window.claudeExporterContentScriptLoaded`) to prevent duplicate message listeners
 
 ### Export Flow
-- **Popup "Export Current"** → sends message to content script on the active claude.ai tab
-- **Popup "Export All"** → sends message to content script, which fetches all conversations and ZIPs them
-- **Browse page** → loads conversation list via content script relay (`sendMessageToClaudeTab`), then exports directly via `fetch()` to claude.ai API
+There is **one** export pipeline, in `features/export/`. Both callers go through it:
+- **Popup "Export Current" / "Export All"** → message to the content script
+- **Browse page** → loads the conversation list via content script relay (`sendMessageToClaudeTab`), then exports directly via `fetch()` to the claude.ai API
 
-### Chrome vs Firefox API Differences
-- Chrome MV3: `chrome.scripting.executeScript({ target, files })` — accepts file array
-- Firefox MV2: `chrome.tabs.executeScript(tabId, { file })` — one file at a time, must loop
+(Historically `browse.js` and `content.js` each had their own copy of this pipeline. They must not diverge again.)
+
+### Chat Cache
+- IndexedDB in the **extension origin**, so `browse` and `background` share it directly; the content script reaches it by messaging background
+- Stores raw conversation API JSON keyed by UUID; a hit requires an exact `updated_at` match *and* a matching `requestSignature`
+- Written immediately after each successful fetch, so cancelling an export interrupts rather than discards
+- Disposable: excluded from Backup, dropped on schema change. Entries whose conversation was deleted upstream are **Orphans** — see CONTEXT.md
+
+### Firefox MV3 host permissions
+Firefox MV3 makes host permissions optional and user-revocable. The extension is useless without `https://claude.ai/*`, so it must detect the not-granted state and request it rather than silently failing.

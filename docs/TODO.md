@@ -52,6 +52,12 @@
 
 ### Medium Priority 🟡
 
+- **Chat Cache — follow-ups** (see [ADR-0002](adr/0002-chat-cache-in-indexeddb.md); each is its own commit, after the cache lands)
+  - **Warm cache on a schedule** — walk missing/stale conversations and fill the cache without producing a ZIP, so the export click itself is fast. Cheap once `features/export/` owns the single pipeline
+  - **Replace batches-of-3 with a continuous concurrency limit** — current `browse.js` fetches 3 at a time with a 200ms inter-batch delay, so the whole batch waits on its slowest member. Wants a proper parallel limiter over `Promise.allSettled` with retries
+  - **Cache inspector view** — entry sizes, `fetchedAt`, total bytes on disk, reclaimable space. This is the storage-management surface the orphan filter deliberately isn't
+  - **Miss count on the Export button** — "Export Selected (2,000 — 43 to fetch)". Deferred: needs a cheap count-misses query, and the number goes stale the moment claude.ai updates anything
+
 - **Artifact indicators in browse table**
   - Show icon next to conversation name if it contains artifacts
   - Add filter options in funnel dropdown: with artifacts / without artifacts
