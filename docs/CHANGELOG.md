@@ -2,11 +2,9 @@
 
 ## [1.19.3]
 
-**Install-from-source instructions pointed at directories deleted in v1.11.0.** They told you to load the and folders, which ADR-0001 collapsed into a single tree built into , and they never mentioned building at all — so the section could not work as written. Adds the build step, corrects both load targets, and records the two Firefox facts that make a fresh install look broken: host permissions are optional under MV3 and start ungranted, and an already-open claude.ai tab needs a refresh before the content script is there.
+**Install-from-source instructions pointed at directories deleted in v1.11.0.** They told you to load the `chrome/` and `firefox/` folders, which ADR-0001 collapsed into a single `src/` tree built into `dist/`, and they never mentioned building at all — so the section could not work as written. Adds the build step, corrects both load targets, and records the two Firefox facts that make a fresh install look broken: host permissions are optional under MV3 and start ungranted, and an already-open claude.ai tab needs a refresh before the content script is there.
 
-Also notes that a temporary add-on needs no signing, or ZIP — it loads from [3g
-H H H H H H H H H H  
-directly.
+Also notes that a temporary add-on needs no signing, `.xpi` or ZIP — it loads from `dist/firefox/manifest.json` directly.
 
 ## [1.19.2]
 
