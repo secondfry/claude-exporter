@@ -36,6 +36,12 @@ into `dist/chrome/` and `dist/firefox/`. The repo root *is* the extension projec
 
 - **Never use inline `export`.** Declarations stay bare; each file ends with a
   single `export { ... }` block.
+- **Never use a type assertion (`x as Y`).** Use a type guard — `instanceof`, an
+  `x is Y` predicate — or validate. An assertion silences the compiler exactly
+  where the data is least trustworthy: DOM lookups, `JSON.parse`, message
+  responses. `as const` and `satisfies` are fine; they check rather than assert.
+  Remaining offenders live in `entrypoints/popup` and `entrypoints/options`
+  (mostly `getElementById`) — don't add more.
 - `.ts` only. No `.js` source files, no JSDoc typing.
 - Tests colocate with sources as `*.spec.ts`. There is no `tests/` directory.
 - **There is no `shared/` or `utils/`.** Those names have no admission criteria and
