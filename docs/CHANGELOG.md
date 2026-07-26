@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.21.3]
+
+**The two Chat Cache invariants that only a browser can check are now confirmed.** Continuing a conversation on claude.ai refetches that conversation and no other, so the `updated_at` equality test in ADR-0002 really does invalidate — the failure mode it guards against is silent, exporting a Conversation missing its newest messages while reporting success. And `claude-exporter-chat-cache` exists solely on the extension origin, with nothing of ours in claude.ai's IndexedDB, which is the whole point of relaying the content script's reads through the background worker per ADR-0003; a second copy would have duplicated tens of megabytes per account.
+
 ## [1.21.2]
 
 **The smoke-test item now records what was actually run.** It has sat at the top of TODO as an undifferentiated block since v1.12.0, which made it impossible to tell how much of it was still outstanding — and it kept restating checks that had already passed. Split into a verified list and a remaining one, with Chrome called out as never having been loaded at all. The status-filter check is marked for re-running: it passed against the pre-v1.21.0 filter, which no longer exists.

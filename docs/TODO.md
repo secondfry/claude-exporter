@@ -19,6 +19,11 @@
   - [x] Options save, Test Connection
   - [x] Backup export
   - [x] Chat Cache count and Clear Cache button render in Options
+  - [x] continuing one chat on claude.ai refetches only that chat — the check
+        that would catch a loosened `updated_at` comparison, which fails by
+        silently exporting a Conversation missing its newest messages
+  - [x] `claude-exporter-chat-cache` exists only on the extension origin, with
+        nothing of ours under `https://claude.ai` (ADR-0003 confirmed)
 
   Still unverified **in either browser**:
 
@@ -27,13 +32,7 @@
   - [ ] the new status filters: Never exported / Updated since export /
         Previously exported, with a chat that is exported-then-edited appearing
         under both of the last two
-  - [ ] continue one chat on claude.ai, re-export the set, confirm only that one
-        refetches — this is the check that would catch a loosened `updated_at`
-        comparison, which fails by silently exporting a Conversation missing its
-        newest messages
   - [ ] Clear Cache drops the count to 0
-  - [ ] Application → IndexedDB shows `claude-exporter-chat-cache` only under the
-        extension origin, never under claude.ai (ADR-0003)
   - [ ] Firefox re-prompts after revoking host access in `about:addons`
 
   **Chrome has never been loaded at all.** Load `dist/chrome/` unpacked and run
