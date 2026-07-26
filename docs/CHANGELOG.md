@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.14.0]
+
+**`features/tracking` deepened.** Callers now get a queryable Export Record book (`isStale`, `staleCount`, `size`) instead of a raw `{ uuid: timestamp }` map, and no longer own cache invalidation themselves — `recordExports`/`markExported`/`clearExportRecords` return the post-write book directly.
+
+- Reads and writes are serialised through a single-tail promise chain, so concurrent record writes within one JavaScript context stop losing each other. This is scoped honestly: it only orders operations *within* one context — the browse page and the content script are separate contexts and can still clobber each other across a storage round-trip. The window is one round-trip wide and the merge is additive (per-uuid stamping, not object replacement), so the worst case is a lost update, not corruption.
+- The export pipeline now writes the Export Record for every Conversation it succeeds on, from inside `features/export/`, so the four call sites that previously each had to remember to call `recordExports` themselves can no longer forget.
+- Browse no longer writes the `exportTimestamps` storage key directly — it goes through `features/tracking` like every other caller.
+- Fixed: a first-seen Conversation showed its raw API model in the browse table until the page was reloaded, instead of picking up the snapshot recorded moments earlier.
+
 ## [1.12.0]
 
 **Chat Cache.** Conversations already downloaded are kept locally, so re-exporting the same chats skips the network entirely. This is what the 1.11.0 restructure was groundwork for. See ADR-0002 and ADR-0003.

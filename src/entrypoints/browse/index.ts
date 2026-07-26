@@ -24,14 +24,15 @@ import { localCache } from '../../features/cache';
 import { exportConversations } from '../../features/export';
 import type { ExportOptions, ExportProgress, ExportTarget } from '../../features/export';
 import {
-  getDisplayModel,
   recordModelSnapshots,
-  isStale,
   loadExportRecords,
-  loadModelSnapshots,
-  recordExports,
+  emptyExportRecords,
+  loadModelDisplay,
+  emptyModelDisplay,
+  markExported,
+  clearExportRecords,
 } from '../../features/tracking';
-import type { ExportRecords, ModelSnapshots } from '../../features/tracking';
+import type { ExportRecordBook, ModelDisplayBook } from '../../features/tracking';
 import { formatModelName, getModelBadgeClass, inferModel } from '../../features/models';
 import { backupExtensionData, importBackup, showImportModeModal } from '../../features/backup';
 import type { ImportMode } from '../../features/backup';
@@ -107,8 +108,8 @@ let orgId: string | null = null;
 let sortStack: SortCriterion[] = [];
 const selectedConversations = new Set<string>();
 let lastCheckedIndex: number | null = null;
-let exportRecords: ExportRecords = {};
-let modelSnapshots: ModelSnapshots = {};
+let exportRecords: ExportRecordBook = emptyExportRecords();
+let models: ModelDisplayBook = emptyModelDisplay('original');
 let statusFilter: StatusFilter = 'all';
 let dateFormat: 'mdy' | 'dmy' = 'mdy';
 let timeFormat: '12h' | '24h' = '12h';
@@ -146,37 +147,6 @@ function formatTime(dt: Date): string {
   return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
-function isNewOrUpdated(conv: ConversationSummary): boolean {
-  return isStale(conv, exportRecords);
-}
-
-/**
- * features/tracking#getDisplayModel answers only "which model, and was it
- * bounced". The table additionally shows the *other* model in a tooltip, so
- * that half is reconstructed here from the same snapshot data.
- */
-interface DisplayModelWithTooltip {
-  model: string;
-  bounced: boolean;
-  other: string;
-  otherLabel: string;
-}
-
-function displayModelWithTooltip(conv: ConversationSummary): DisplayModelWithTooltip {
-  const { model, bounced } = getDisplayModel(conv, modelSnapshots, modelDisplay);
-  const snap = modelSnapshots[conv.uuid];
-  if (snap && snap.firstSeen) {
-    const useCurrent = modelDisplay === 'current';
-    return {
-      model,
-      bounced,
-      other: useCurrent ? snap.firstSeen : snap.current || snap.firstSeen,
-      otherLabel: useCurrent ? 'Originally' : 'Currently',
-    };
-  }
-  return { model, bounced, other: conv.model || '', otherLabel: '' };
-}
-
 // ---------------------------------------------------------------------------
 // Page lifecycle
 // ---------------------------------------------------------------------------
@@ -206,9 +176,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const loadingStart = Date.now();
   await loadOrgId();
   exportRecords = await loadExportRecords();
-  modelSnapshots = await loadModelSnapshots();
   await loadDateTimePrefs();
   await loadModelDisplayPref();
+  models = await loadModelDisplay(modelDisplay);
   const elapsed = Date.now() - loadingStart;
   if (elapsed < 1000) await new Promise((r) => setTimeout(r, 1000 - elapsed));
   const loadingText = el('loadingText');
@@ -313,6 +283,7 @@ async function loadConversations(): Promise<void> {
     // Best-effort: snapshot recording must never block rendering
     try {
       await recordModelSnapshots(conversations);
+      models = await loadModelDisplay(modelDisplay);
     } catch (error) {
       console.error('Error recording model snapshots:', error);
     }
@@ -320,7 +291,7 @@ async function loadConversations(): Promise<void> {
     // Infer models for conversations with null model
     allConversations = conversations.map((conv) => ({
       ...conv,
-      model: inferModel(conv as Parameters<typeof inferModel>[0]),
+      model: inferModel(conv),
     }));
 
     applyFiltersAndSort();
@@ -362,9 +333,9 @@ function applyFiltersAndSort(): void {
 
     let matchesStatus = true;
     if (statusFilter === 'new') {
-      matchesStatus = isNewOrUpdated(conv);
+      matchesStatus = exportRecords.isStale(conv);
     } else if (statusFilter === 'exported') {
-      matchesStatus = !isNewOrUpdated(conv);
+      matchesStatus = !exportRecords.isStale(conv);
     }
 
     return matchesSearch && matchesStatus;
@@ -390,9 +361,7 @@ function sortValue(conv: ConversationSummary, field: SortField): string | number
     case 'updated':
       return new Date(conv.updated_at).getTime();
     case 'model':
-      return formatModelName(
-        getDisplayModel(conv, modelSnapshots, modelDisplay).model
-      ).toLowerCase();
+      return formatModelName(models.display(conv).model).toLowerCase();
   }
 }
 
@@ -488,11 +457,11 @@ function displayConversations(): void {
     const updatedTime = formatTime(updatedDt);
     const createdDate = formatDate(createdDt);
     const createdTime = formatTime(createdDt);
-    const modelInfo = displayModelWithTooltip(conv);
+    const modelInfo = models.display(conv);
     const modelBadgeClass = getModelBadgeClass(modelInfo.model);
     const projectName = getProjectName(conv);
 
-    const newUpdated = isNewOrUpdated(conv);
+    const newUpdated = exportRecords.isStale(conv);
     html += `
       <tr data-id="${escapeHtml(conv.uuid)}">
         <td>
@@ -664,14 +633,14 @@ function updateExportButtonText(): void {
 function updateStats(): void {
   const stats = el('stats');
   if (!stats) return;
-  const newCount = allConversations.filter((c) => isNewOrUpdated(c)).length;
+  const newCount = exportRecords.staleCount(allConversations);
   stats.textContent = `Showing ${filteredConversations.length} of ${allConversations.length} conversations (${newCount} new/updated)`;
 }
 
 function autoSelectNewUpdated(): void {
   selectedConversations.clear();
   filteredConversations.forEach((conv) => {
-    if (isNewOrUpdated(conv)) {
+    if (exportRecords.isStale(conv)) {
       selectedConversations.add(conv.uuid);
     }
   });
@@ -753,9 +722,9 @@ function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-/** Refresh Export Records from storage and repaint the table's staleness state. */
-async function refreshExportRecords(): Promise<void> {
-  exportRecords = await loadExportRecords();
+/** Apply a freshly-loaded Export Record book and repaint the table's staleness state. */
+function applyExportRecords(book: ExportRecordBook): void {
+  exportRecords = book;
   displayConversations();
   updateStats();
 }
@@ -772,14 +741,15 @@ async function exportSingle(target: ExportTarget): Promise<void> {
 
   try {
     const result = await exportConversations(orgId, [target], options, { cache: localCache });
-    // exportConversations never writes Export Records — that is the caller's job.
-    await recordExports(result.exportedIds);
     showToast(
       result.artifactCount > 0
         ? `Exported: ${target.name} with ${result.artifactCount} artifact(s)`
         : `Exported: ${target.name}`
     );
-    await refreshExportRecords();
+    if (!result.recordsWritten) {
+      showToast('Export succeeded, but could not be recorded as exported.', true);
+    }
+    applyExportRecords(await loadExportRecords());
   } catch (error) {
     console.error('Export error:', error);
     showToast(`Failed to export: ${errorMessage(error)}`, true);
@@ -830,8 +800,6 @@ async function exportAllFiltered(): Promise<void> {
 
     modal.hide();
 
-    await recordExports(result.exportedIds);
-
     const failed = result.failedNames.length;
     const completed = result.exportedIds.length;
     if (single) {
@@ -852,8 +820,11 @@ async function exportAllFiltered(): Promise<void> {
     if (result.cacheQuotaExceeded) {
       showToast('Local storage is full, so conversations are no longer being cached.', true);
     }
+    if (!result.recordsWritten) {
+      showToast('Export succeeded, but could not be recorded as exported.', true);
+    }
 
-    await refreshExportRecords();
+    applyExportRecords(await loadExportRecords());
   } catch (error) {
     modal.hide();
     // A cancel already showed its own toast via the cancel button.
@@ -988,19 +959,16 @@ function setupEventListeners(): void {
   // Mark all as exported
   req('markAllExported').addEventListener('click', async () => {
     const ids = allConversations.map((c) => c.uuid);
-    await recordExports(ids);
-    await refreshExportRecords();
+    applyExportRecords(await markExported(ids));
     settingsDropdown.classList.remove('open');
     showToast(`Marked ${ids.length} conversations as exported`);
   });
 
   // Mark all as new
   req('markAllNew').addEventListener('click', async () => {
-    exportRecords = {};
-    await storageSet('local', { exportTimestamps: {} });
+    applyExportRecords(await clearExportRecords());
     selectedConversations.clear();
     autoSelectNewUpdated();
-    updateStats();
     settingsDropdown.classList.remove('open');
     showToast('All conversations marked as new');
   });

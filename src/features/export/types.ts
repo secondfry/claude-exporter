@@ -1,7 +1,9 @@
 // The contract the export pipeline is coded against. Both callers (popup via
 // the content script, and the browse page) go through exportConversations —
-// see CLAUDE.md "Export Flow". Nothing here touches chrome.storage or the DOM
-// beyond the download itself; Export Records are the caller's job.
+// see CLAUDE.md "Export Flow". The pipeline writes its own Export Records
+// after the download (CONTEXT.md: "An Export writes an Export Record for
+// every Conversation it succeeds on") — callers do not need to call
+// recordExports themselves.
 
 import type { CachePort } from '../cache/messages';
 import type { ArtifactFormat, ExportFormat } from '../conversation/types';
@@ -40,7 +42,7 @@ interface ExportProgress {
 }
 
 interface ExportResult {
-  /** Conversations the caller should write an Export Record for. */
+  /** Conversations an Export Record was written for (a receipt, not a to-do). */
   exportedIds: string[];
   failedNames: string[];
   artifactCount: number;
@@ -50,6 +52,12 @@ interface ExportResult {
   fromCache: number;
   /** The cache filled up mid-run. The export itself still succeeded. */
   cacheQuotaExceeded: boolean;
+  /**
+   * False when the Export succeeded but its Export Records could not be
+   * stored — the user has the file, so this never causes a rejection, but a
+   * caller may want to surface it.
+   */
+  recordsWritten: boolean;
 }
 
 interface ExportHooks {

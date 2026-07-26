@@ -48,6 +48,16 @@
   `hasClaudeAccess()` only at load, so a revoke afterwards turns every fetch into an
   opaque failure with no prompt.
 
+- **Cross-context Export Record race (v1.14.0 follow-up)** — `features/tracking`'s
+  write queue only serialises operations within one JavaScript context. The browse
+  page and the content script are separate contexts, each with their own queue, so a
+  write from one can still be lost to a concurrent write from the other across a
+  storage round-trip. The merge is additive (per-uuid stamping), so damage is bounded
+  to a single lost update in a one-round-trip window, not corruption — but closing it
+  properly needs either `chrome.storage.onChanged`-driven invalidation/replay, or
+  moving to a single background-worker-owned writer that both contexts relay through
+  (mirroring how the Chat Cache already relays through background per ADR-0003).
+
 
 - **Prepare for new model families (e.g. Mythos)**
   - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)

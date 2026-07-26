@@ -2,16 +2,17 @@
 //
 // It exists because only code running on a claude.ai page carries the session
 // cookies the API needs. It owns no export logic: fetching lives in
-// features/conversation, the export pipeline in features/export, and Export
-// Records in features/tracking. It previously carried its own copy of the
-// pipeline and drifted from the browse page's — see CLAUDE.md "Export Flow".
+// features/conversation, the export pipeline in features/export, which also
+// writes Export Records (features/tracking). This file only snapshots models.
+// It previously carried its own copy of the pipeline and drifted from the
+// browse page's — see CLAUDE.md "Export Flow".
 
 import { remoteCache } from '../../features/cache';
 import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
 import { initErrorCapture } from '../../features/diagnostics';
 import { exportConversations } from '../../features/export';
 import type { ExportOptions, ExportResult, ExportTarget } from '../../features/export';
-import { recordExports, recordModelSnapshots } from '../../features/tracking';
+import { recordModelSnapshots } from '../../features/tracking';
 import { onMessage } from '../../platform';
 
 import type {
@@ -83,7 +84,6 @@ async function handleExportConversation(
   const result = await exportConversations(request.orgId, [target], resolveOptions(request), {
     cache: remoteCache,
   });
-  await recordExports(result.exportedIds);
   return toExportResponse(result, 1);
 }
 
@@ -103,7 +103,6 @@ async function handleExportAllConversations(
   const result = await exportConversations(request.orgId, targets, resolveOptions(request), {
     cache: remoteCache,
   });
-  await recordExports(result.exportedIds);
   return toExportResponse(result, targets.length);
 }
 

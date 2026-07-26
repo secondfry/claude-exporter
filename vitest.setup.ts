@@ -24,16 +24,25 @@ function createArea(): StubArea {
   return {
     _data: data,
     async get(keys) {
-      if (keys === null) return { ...data };
+      // Deep-copy on the way out: real chrome.storage structured-clones
+      // across the extension boundary, so a caller mutating what it read
+      // can never reach back into this stub's data. A shallow `{...data}`
+      // would still alias any nested object/array values (e.g. a book's
+      // records map), letting a later write retroactively mutate an older
+      // caller's already-returned data — a bug real chrome.storage cannot
+      // have.
+      if (keys === null) return structuredClone(data);
       const wanted = Array.isArray(keys) ? keys : [keys];
       const out: StorageRecord = {};
       for (const key of wanted) {
-        if (key in data) out[key] = data[key];
+        if (key in data) out[key] = structuredClone(data[key]);
       }
       return out;
     },
     async set(items) {
-      Object.assign(data, items);
+      // Deep-copy on the way in too, for the same reason: the caller's
+      // object must not remain live inside the stub after the call returns.
+      Object.assign(data, structuredClone(items));
     },
     async remove(keys) {
       for (const key of Array.isArray(keys) ? keys : [keys]) delete data[key];

@@ -12,6 +12,13 @@ import type { Conversation } from '../conversation/types';
 import { extractArtifactFiles } from '../artifacts';
 import { inferModel } from '../models';
 import { convertToMarkdown, convertToText } from '../rendering';
+// Direct import, deliberately not an injected hook: an optional hook is one a
+// caller will eventually omit, and this codebase has already had the two
+// export callers diverge once over this exact call (CLAUDE.md). The content
+// script may call this directly — chrome.storage.local is extension-scoped,
+// not origin-partitioned, unlike the Chat Cache, which needs the background
+// relay (ADR-0003).
+import { recordExports } from '../tracking';
 
 import {
   bulkZipFilename,
@@ -280,11 +287,64 @@ async function fetchAll(
   };
 }
 
+interface FinishArgs {
+  blob: Blob;
+  filename: string;
+  succeededIds: string[];
+  failedNames: string[];
+  artifactCount: number;
+  cacheHits: number;
+  cacheQuotaExceeded: boolean;
+}
+
+/**
+ * Download the file and write its Export Records, then build the result.
+ *
+ * The single shared tail for both success paths (one file, or a ZIP): one
+ * place that downloads, one place that records, one place that shapes
+ * `ExportResult`. Records are written after the download — an Export Record
+ * asserts the user got a file (CONTEXT.md) — and only for `succeededIds`,
+ * never when it is empty. A record-write failure never fails the export: the
+ * user already has the file, so it is caught, warned, and reported via
+ * `recordsWritten` instead of rejecting.
+ */
+async function finish({
+  blob,
+  filename,
+  succeededIds,
+  failedNames,
+  artifactCount,
+  cacheHits,
+  cacheQuotaExceeded,
+}: FinishArgs): Promise<ExportResult> {
+  downloadBlob(blob, filename);
+
+  let recordsWritten = true;
+  if (succeededIds.length > 0) {
+    try {
+      await recordExports(succeededIds);
+    } catch (error) {
+      recordsWritten = false;
+      console.warn('Failed to write Export Records for a successful export:', error);
+    }
+  }
+
+  return {
+    exportedIds: succeededIds,
+    failedNames,
+    artifactCount,
+    filename,
+    fromCache: cacheHits,
+    cacheQuotaExceeded,
+    recordsWritten,
+  };
+}
+
 /**
  * Export one or more conversations to a file the user receives immediately.
  *
- * Writes no Export Records and renders no UI: the caller records against
- * `exportedIds` and reports through `hooks.onProgress`.
+ * Writes an Export Record for every conversation it succeeds on (CONTEXT.md)
+ * and renders no UI: the caller reports through `hooks.onProgress`.
  */
 async function exportConversations(
   orgId: string,
@@ -328,15 +388,15 @@ async function exportConversations(
   if (single && entries.length === 1) {
     const entry = entries[0]!;
     const filename = entry.path.slice(entry.path.lastIndexOf('/') + 1);
-    downloadBlob(new Blob([entry.content], { type: mimeForFilename(filename) }), filename);
-    return {
-      exportedIds: succeededIds,
+    return finish({
+      blob: new Blob([entry.content], { type: mimeForFilename(filename) }),
+      filename,
+      succeededIds,
       failedNames,
       artifactCount,
-      filename,
-      fromCache: cacheHits,
+      cacheHits,
       cacheQuotaExceeded,
-    };
+    });
   }
 
   const zip = new JSZip();
@@ -363,16 +423,15 @@ async function exportConversations(
     ? `${sanitizeFilename(resolvedNames.get(first.uuid) || first.name || first.uuid)}.zip`
     : bulkZipFilename(options);
 
-  downloadBlob(blob, filename);
-
-  return {
-    exportedIds: succeededIds,
+  return finish({
+    blob,
+    filename,
+    succeededIds,
     failedNames,
     artifactCount,
-    filename,
-    fromCache: cacheHits,
+    cacheHits,
     cacheQuotaExceeded,
-  };
+  });
 }
 
 export { buildEntries, downloadBlob, exportConversations };

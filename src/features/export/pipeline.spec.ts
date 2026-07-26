@@ -18,9 +18,13 @@ vi.mock('../rendering', () => ({
 vi.mock('../models', () => ({
   inferModel: vi.fn(() => 'claude-test'),
 }));
+vi.mock('../tracking', () => ({
+  recordExports: vi.fn(async () => undefined),
+}));
 
 const { fetchConversation } = await import('../conversation/api');
 const { extractArtifactFiles } = await import('../artifacts');
+const { recordExports } = await import('../tracking');
 
 interface CapturedDownload {
   filename: string;
@@ -523,5 +527,62 @@ describe('the Chat Cache', () => {
     expect(result.fromCache).toBe(0);
     expect(result.cacheQuotaExceeded).toBe(false);
     expect(downloads).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Export Records (the pipeline writes its own, per CONTEXT.md)
+
+describe('writing Export Records', () => {
+  it('records only the succeeded ids, not a target that fetched fine but produced nothing', async () => {
+    vi.mocked(extractArtifactFiles).mockImplementation((data: Conversation) =>
+      data.uuid === 'uuid-1' ? [{ filename: 'a.py', content: 'print(1)' }] : []
+    );
+
+    const result = await exportConversations(
+      'org',
+      targets('First chat', 'Second chat'),
+      options({ flattenArtifacts: true, includeChats: false })
+    );
+
+    expect(recordExports).toHaveBeenCalledTimes(1);
+    expect(recordExports).toHaveBeenCalledWith(['uuid-1']);
+    expect(result.exportedIds).toEqual(['uuid-1']);
+    expect(result.recordsWritten).toBe(true);
+  });
+
+  it('writes no records when the export throws on abort during zipping', async () => {
+    const controller = new AbortController();
+
+    await expect(
+      exportConversations('org', targets('a', 'b'), options(), {
+        signal: controller.signal,
+        onProgress: (p) => {
+          if (p.phase === 'zipping') controller.abort();
+        },
+      })
+    ).rejects.toThrow(/abort/i);
+
+    expect(recordExports).not.toHaveBeenCalled();
+  });
+
+  it('resolves with recordsWritten: false when recordExports rejects', async () => {
+    vi.mocked(recordExports).mockRejectedValueOnce(new Error('storage full'));
+
+    const result = await exportConversations('org', targets('First chat'), options());
+
+    expect(downloads).toHaveLength(1);
+    expect(result.recordsWritten).toBe(false);
+    expect(result.exportedIds).toEqual(['uuid-0']);
+  });
+
+  it('does not call recordExports at all for a fully-failed bulk export', async () => {
+    vi.mocked(fetchConversation).mockRejectedValue(new Error('HTTP 500'));
+
+    await expect(
+      exportConversations('org', targets('First chat', 'Second chat'), options())
+    ).rejects.toThrow();
+
+    expect(recordExports).not.toHaveBeenCalled();
   });
 });
