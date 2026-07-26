@@ -9,9 +9,8 @@ import { getManifest, type Target } from './src/manifest.config';
 const ROOT = resolve(__dirname);
 const SRC = resolve(ROOT, 'src');
 
-function isTarget(value: string): value is Target {
-  return value === 'chrome' || value === 'firefox';
-}
+const isTarget = (value: string): value is Target =>
+  value === 'chrome' || value === 'firefox';
 
 // Vite's HTML-entry pipeline only emits ESM <script type="module"> bundles.
 // Content scripts (and, for portability, the background script) must ship as
@@ -21,7 +20,7 @@ function isTarget(value: string): value is Target {
 // formats, so this plugin drives a second, IIFE-format Rollup build for those
 // entries once the primary (page) build has written its output, into the
 // same outDir.
-function iifeEntriesPlugin(outDir: string): Plugin {
+const iifeEntriesPlugin = (outDir: string): Plugin => {
   return {
     apply: 'build',
     name: 'claude-exporter-iife-entries',
@@ -62,12 +61,12 @@ function iifeEntriesPlugin(outDir: string): Plugin {
       }
     },
   };
-}
+};
 
 // Copies static, non-transformed assets: the extension icons and the
 // content-script stylesheet (referenced by filename from manifest
 // content_scripts.css, so it must land at the outDir root untouched).
-function staticAssetsPlugin(outDir: string): Plugin {
+const staticAssetsPlugin = (outDir: string): Plugin => {
   return {
     apply: 'build',
     name: 'claude-exporter-static-assets',
@@ -86,7 +85,7 @@ function staticAssetsPlugin(outDir: string): Plugin {
       );
     },
   };
-}
+};
 
 // Vite's HTML pipeline emits each HTML entry at a path relative to `root`
 // (e.g. dist/chrome/src/entrypoints/popup/popup.html), and rewrites the
@@ -96,7 +95,7 @@ function staticAssetsPlugin(outDir: string): Plugin {
 // assets to their basename and rewrites the now-broken relative references
 // inside their source to match, after entryFileNames/chunkFileNames/
 // assetFileNames have already flattened everything else.
-function flattenHtmlPlugin(): Plugin {
+const flattenHtmlPlugin = (): Plugin => {
   return {
     apply: 'build',
     // Vite's own HTML plugin (vite:build-html) emits the nested HTML asset
@@ -127,11 +126,11 @@ function flattenHtmlPlugin(): Plugin {
       }
     },
   };
-}
+};
 
 // Emits manifest.json for the target being built, generated from the shared
 // manifest.config.ts rather than hand-maintained per-browser JSON files.
-function manifestPlugin(target: Target): Plugin {
+const manifestPlugin = (target: Target): Plugin => {
   return {
     apply: 'build',
     name: 'claude-exporter-manifest',
@@ -143,7 +142,7 @@ function manifestPlugin(target: Target): Plugin {
       });
     },
   };
-}
+};
 
 export default defineConfig(({ mode }) => {
   const target: Target = isTarget(mode) ? mode : 'chrome';
