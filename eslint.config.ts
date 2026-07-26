@@ -67,8 +67,10 @@ const sortObjectTypesConfig: RuleEntry = [
   { groups: ['unknown', 'index-signature'], type: 'natural' },
 ];
 
-// Named so the temporary override at the bottom of this file can restate the
-// rule without duplicating the selectors it is not touching.
+// The no-restricted-syntax selectors are named rather than inlined because
+// ESLint severity is per-rule, not per-selector: overriding one of them means
+// restating the whole rule, and a named fragment keeps that from duplicating
+// the selectors it is not touching.
 const testFileExtensionSelector = {
   message:
     'Test files must use .spec.ts extension, not .test.ts. Use filename.spec.ts instead.',
@@ -257,27 +259,6 @@ const config = defineConfig(
       '@typescript-eslint/no-unsafe-member-access': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
       '@typescript-eslint/require-await': 'warn',
-    },
-  },
-
-  // TEMPORARY — remove in the follow-up commit that converts function
-  // declarations and expressions to arrow functions.
-  //
-  // The two arrow-function selectors have no autofixer and currently match
-  // across the tree. ESLint severity is per-rule, not per-selector, so the only
-  // way to stop those two from failing the build is to restate the whole rule
-  // at 'warn'. The other two selectors have zero violations today, so nothing
-  // is actually relaxed by this — but this block still MUST be deleted, not
-  // adjusted, once the conversion lands.
-  {
-    rules: {
-      'no-restricted-syntax': [
-        'warn',
-        testFileExtensionSelector,
-        inlineExportSelector,
-        functionDeclarationSelector,
-        functionExpressionSelector,
-      ],
     },
   },
 );
