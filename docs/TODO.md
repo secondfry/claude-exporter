@@ -34,13 +34,14 @@
   meant to be deleted, not adjusted.
 
   1. _Arrow functions._ `no-restricted-syntax` bans `function` declarations and
-     expressions, and 192 currently violate it (191 declarations, 1 expression),
-     with no autofixer. They cluster in `entrypoints/browse/index.ts` (33),
-     `platform/index.ts` (17), `features/tracking/index.ts` (16),
-     `features/cache/db.ts` (11) and `features/backup/index.ts` (10); the rest
-     are spread one to nine per file across every other module. ESLint severity
-     is per-rule rather than per-selector, so the whole rule sits at `warn` until
-     the conversion lands.
+     expressions, with no autofixer. `src/features/**` and `src/platform/**` are
+     converted (126 sites). 58 remain, all in `entrypoints/browse/index.ts` (33),
+     the other entrypoints (24) and `manifest.config.ts` (1). One site will never
+     convert: `features/tracking/index.ts` has a `get size()` accessor, which has
+     no arrow form — the selector exempts method shorthands but not getters, and
+     wants `[kind='get']` added to its `:not(...)` list. ESLint severity is
+     per-rule rather than per-selector, so the whole rule sits at `warn` until the
+     entrypoint conversion lands and the selector gap is closed.
   2. _`recommendedTypeChecked` findings._ 78 pre-existing errors, mostly
      `no-misused-promises` (17, async handlers passed to `addEventListener`),
      `require-await` (15) and the `no-unsafe-*` family (~30, `any` escaping from

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.18.1]
+
+**`features/` and `platform/` now use arrow functions only.** No behaviour changes; the conversion is syntactic.
+
+- 126 `function` declarations across `src/features/**` and `src/platform/**` became `const … = () =>`. Names, signatures, type guards and comments are unchanged, so the `export { … }` blocks and every spec still refer to the same bindings.
+- Declaration order was left as written. Arrows are not hoisted, so this would break any module that calls a helper while it is still evaluating — but no module-level code in either tree calls anything, and every backwards reference (in `features/artifacts` and `features/rendering` especially) sits inside another function body that only runs after the module finished loading.
+- One site does not convert and is not meant to: the `get size()` accessor on the Export Record book in `features/tracking`. A getter has no arrow form; the rule's selector needs to exempt accessors the way it already exempts method shorthands.
+- `src/entrypoints/**` is still to do, so the temporary severity downgrade in `eslint.config.ts` stays for now.
+
 ## [1.18.0]
 
 **Formatting joined the lint gate.** No behaviour changes; the extension builds the same features.
