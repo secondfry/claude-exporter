@@ -151,6 +151,10 @@
     <div id="header-title">Claude Exporter</div>
     <div id="header-version"></div>
   </div>
+  <div id="claudeAccessNotice" class="status error" style="display: none;">
+    Claude Exporter needs permission to access claude.ai.
+    <button id="grantClaudeAccess" style="width: auto; padding: 4px 8px; margin-top: 6px;">Grant Access</button>
+  </div>
   <div style="padding: 0 5px;">
     <div class="options">
     <!-- Chat Export Options -->
@@ -217,8 +221,6 @@
   <div id="status"></div>
   </div>
 
-  <script src="popup-theme.js"></script>
-  <script src="utils.js"></script>
-  <script src="popup.js"></script>
+  <script type="module" src="./index.ts"></script>
 </body>
 </html>

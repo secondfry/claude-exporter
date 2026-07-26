@@ -4,12 +4,45 @@
 
 ### Critical Priority 🔴
 
+- **Manual smoke test of v1.11.0 in both browsers** — the restructure is verified by
+  typecheck, 134 unit tests and a build-output audit, but nothing has actually been
+  loaded into a browser yet. Load `dist/chrome/` unpacked and `dist/firefox/` temporary,
+  then check: popup Export Current + Export All, browse page load / filter / select /
+  Export Selected, cancel mid-export, options save + Test Connection, backup export and
+  re-import, and Firefox's permission prompt after revoking host access in `about:addons`.
+
+- **Chat Cache (ADR-0002)** — the feature this restructure was groundwork for. Raw
+  conversation JSON in IndexedDB keyed by UUID, hit requires exact `updated_at` match
+  *and* matching `requestSignature`, written immediately after each successful fetch,
+  never migrated, excluded from Backup. `features/cache/` does not exist yet;
+  `CONVERSATION_QUERY` in `features/conversation/api.ts` is the signature source.
+
 ### High Priority 🟠
+
+- **Route `features/backup/` and `features/diagnostics/` through `src/platform/`** — both
+  still call `chrome.*` directly, contradicting the rule that browser differences live
+  only in `platform/`. Works today via Firefox's `chrome` alias, but they bypass the
+  `globalThis.browser ?? chrome` preference every other module uses.
+
+- **Replace the batches-of-3 export loop with a continuous concurrency limiter** — the
+  current pipeline runs `Promise.all` over batches of 3 with a 200 ms inter-batch delay,
+  so the whole batch waits on its slowest member. Wanted: a steady N-in-flight limiter
+  with retry/backoff on failure. Deferred from v1.11.0 deliberately to keep the
+  restructure behaviour-preserving.
+
+- **Warm the Chat Cache on a scheduler** — background alarm that refetches conversations
+  whose `updated_at` has moved, so a bulk export is mostly cache hits. Depends on the
+  Chat Cache landing first.
+
+- **Re-prompt when Firefox host access is revoked mid-session** — the browse page checks
+  `hasClaudeAccess()` only at load, so a revoke afterwards turns every fetch into an
+  opaque failure with no prompt.
+
 
 - **Prepare for new model families (e.g. Mythos)**
   - Source of truth: [Anthropic model IDs and versions docs](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
-  - Current `formatModelName` regex in [chrome/utils.js](../chrome/utils.js) hardcodes family ∈ `{sonnet, opus, haiku}` — anything else (e.g. expected `claude-mythos-preview`) falls through to raw-ID display and gets no badge color
-  - Test coverage now pins this behavior — [tests/utils.test.js](../tests/utils.test.js) "unknown family fallthrough" suite will fail loudly the day Anthropic ships a new family, prompting a regex bump + new badge CSS class
+  - Current `formatModelName` regex in [src/features/](../src/features/) hardcodes family ∈ `{sonnet, opus, haiku}` — anything else (e.g. expected `claude-mythos-preview`) falls through to raw-ID display and gets no badge color
+  - Test coverage now pins this behavior — [src/features/models/index.spec.ts](../src/features/models/index.spec.ts) "unknown family fallthrough" suite will fail loudly the day Anthropic ships a new family, prompting a regex bump + new badge CSS class
   - When a new family lands, the change is small:
     1. Add family to the `(sonnet|opus|haiku)` regex group in `formatModelName`
     2. Add an `if (model.includes('mythos'))` branch in `getModelBadgeClass`
@@ -20,11 +53,11 @@
 
 - **`DEFAULT_MODEL_TIMELINE` maintenance**
   - Every time claude.ai bumps its default model, add an entry; otherwise old null-model conversations get inferred to a now-stale model
-  - Sanity check in [tests/utils.test.js](../tests/utils.test.js) confirms every entry parses cleanly through `formatModelName` (catches typos)
+  - Sanity check in [src/features/models/index.spec.ts](../src/features/models/index.spec.ts) confirms every entry parses cleanly through `formatModelName` (catches typos)
   - Future: consider sourcing from a JSON config file or remote endpoint instead of hardcoded array
 
 - **Track model changes per conversation**
-  - **Phase 1 capture SHIPPED (v1.9.3)** — `recordModelSnapshots()` in `content.js` writes `modelSnapshots` to `chrome.storage.local` every time the conversation list is fetched (browse page load or popup "Export All"), not just on export. Stores `{firstSeen, firstSeenAt, current, currentAt, history[]}` per conversation UUID; raw API model only, never an inferred guess.
+  - **Phase 1 capture SHIPPED (v1.9.3)** — `recordModelSnapshots()` in `src/entrypoints/content/index.ts` writes `modelSnapshots` to `chrome.storage.local` every time the conversation list is fetched (browse page load or popup "Export All"), not just on export. Stores `{firstSeen, firstSeenAt, current, currentAt, history[]}` per conversation UUID; raw API model only, never an inferred guess.
   - **Browse-table display SHIPPED (v1.9.4, revised v1.9.12, configurable v1.9.14)** — Model column shows either the original (first-seen) or current model via `getDisplayModel()`, controlled by the `modelDisplay` preference (default 'original'). Bounced chats get a `*` marker with a tooltip showing the "other" model ("Originally X" when displaying current, "Now using X" when displaying original). Options page "Model Display" section lets users switch.
   - Still pending: surface the snapshot in JSON exports (sidecar or inline field); optionally a dedicated "current model" column or filter for bounced chats
   - `conversation.model` from the API is the *current* model only — when chats get bounced (deprecation, guardrails kicking to Sonnet 4, etc.) the original model is lost
@@ -42,7 +75,7 @@
   - UI plan
     - Phase 1: just record the data + show "first-seen" and "current" models in JSON export
     - Phase 2 (later): two sortable columns in browse table; for now sort by current model only
-  - Note: `DEFAULT_MODEL_TIMELINE` is duplicated in [browse.js](../chrome/browse.js) and [content.js](../chrome/content.js) — keep in sync
+  - Note: `DEFAULT_MODEL_TIMELINE` is duplicated in [browse.js](../src/entrypoints/browse/index.ts) and [content.js](../src/entrypoints/content/index.ts) — keep in sync
 
 - **Light theme overhaul**
   - Whole light theme needs work — readability, contrast, color choices across the board
@@ -162,6 +195,14 @@
 (none currently open)
 
 ## Completed ✅
+
+- **Single TypeScript source tree, Firefox on MV3, one export pipeline** (v1.11.0)
+  - `chrome/` + `firefox/` collapsed into `src/`, built by Vite into `dist/{chrome,firefox}/`. See ADR-0001
+  - Firefox migrated MV2 → MV3; both targets now differ only by manifest
+  - `utils.js` (1,065 lines) split into `src/features/*`; browser API differences confined to `src/platform/`
+  - The duplicated export pipelines in `browse.js` and `content.js` — which had measurably drifted — collapsed into `features/export/`
+  - Tests 54 → 134; `backup`, `export`, `tracking` and the API layer had zero coverage before
+  - Fixed while converting: Export Records written for conversations that produced no file; Export Records matched by name instead of UUID; cancel-during-ZIP still downloading; browse page silently no longer recording model snapshots (unrecoverable data, since the pre-bounce model is lost once claude.ai bumps it)
 
 - **Removed redundant "View" button from browse table** (v1.10.9)
   - Chat name in the Name column is already a clickable link to the conversation; the "View" button duplicated that. Removed the button, handler, and `.btn-view` CSS. Narrower Actions column lets table `min-width` drop from 1200px to 1100px.
@@ -291,11 +332,11 @@
 - **Vitest unit tests for `utils.js`** (v1.9.2)
   - 52 tests covering core export logic, model name parsing, and the recently-fixed bugs
   - Regression coverage for `tool_use.name === 'artifacts'` filter, branch traversal, file extension mapping
-  - `npm test` from `src/`; tests live in `src/tests/`
-  - Canonical source is `chrome/utils.js`; `firefox/utils.js` mirror must stay in sync
+  - (Historical: at the time, `chrome/utils.js` was canonical and `firefox/utils.js` was an
+    untested mirror that had to be hand-synced. Both are gone as of v1.11.0.)
 
 - **Extract model utilities to `utils.js`** (v1.9.2)
-  - Moved `formatModelName`, `getModelBadgeClass`, `DEFAULT_MODEL_TIMELINE` out of `content.js`/`browse.js` into shared `utils.js`
+  - Moved `formatModelName`, `getModelBadgeClass`, `DEFAULT_MODEL_TIMELINE` out of `src/entrypoints/content/index.ts`/`browse.js` into shared `utils.js`
   - Doc-linked the Anthropic model-ID schema in code comments
 
 - **Backup & Restore for extension data** (v1.9.5)

@@ -1,17 +1,28 @@
 // Theme initialization for popup
 // This runs immediately to sync with browse window theme preference
 
-(function() {
+function applyTheme(theme: string | null): void {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme'); // dark
+  }
+}
+
+function toggleTheme(): void {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const next = isLight ? 'dark' : 'light';
+  applyTheme(next);
+  localStorage.setItem('theme', next);
+}
+
+function initTheme(): void {
   // Check if user has set a theme in browse window (stored in localStorage)
   const savedTheme = localStorage.getItem('theme');
 
   if (savedTheme) {
     // Use saved theme from browse window
-    if (savedTheme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme'); // dark
-    }
+    applyTheme(savedTheme);
   } else {
     // Fall back to system preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -24,26 +35,24 @@
   }
 
   // Listen for storage changes (when browse window changes theme)
-  window.addEventListener('storage', (e) => {
+  window.addEventListener('storage', e => {
     if (e.key === 'theme') {
-      if (e.newValue === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
+      applyTheme(e.newValue);
     }
   });
 
   // Listen for system theme changes (only if no saved preference)
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
     if (!localStorage.getItem('theme') && e.matches) {
       document.documentElement.removeAttribute('data-theme');
     }
   });
 
-  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
     if (!localStorage.getItem('theme') && e.matches) {
       document.documentElement.setAttribute('data-theme', 'light');
     }
   });
-})();
+}
+
+export { initTheme, toggleTheme };

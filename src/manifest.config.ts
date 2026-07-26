@@ -34,7 +34,12 @@ function getManifest(target: Target) {
         css: ["content.css"],
       },
     ],
-    options_page: "options.html",
+    // options_ui with open_in_tab, not options_page: Firefox otherwise embeds
+    // the page inside about:addons, where options.html's 810px layout overflows.
+    options_ui: {
+      page: "options.html",
+      open_in_tab: true,
+    },
     web_accessible_resources: [
       {
         resources: ["browse.html"],

@@ -54,13 +54,23 @@ layer, or the browser targets — the rejected alternatives are the useful part.
 
 ## Gotchas
 
-- Content scripts must build as **IIFE** (no ESM in content-script context).
-  Extension pages may use ESM.
-- There is **one** export pipeline, `features/export/`. Popup and browse page both go
-  through it. They each had their own copy once; they must not diverge again.
-- Firefox MV3 host permissions are optional and user-revocable. The extension is
-  useless without `https://claude.ai/*`, so it must detect the not-granted state and
-  request it rather than failing silently.
+- Content and background build as **one self-contained IIFE each** (no ESM in
+  content-script context) via a second Rollup pass in `vite.config.ts`.
+  `inlineDynamicImports` is what forbids shared chunks, and Rollup rejects it with
+  more than one input — so that pass runs **once per entry**. Extension pages may use ESM.
+- Each page's HTML must reference its script as exactly
+  `<script type="module" src="./index.ts">`. Any other form is silently not bundled.
+- The build prints "✓ built" *before* emitting `content.js`/`background.js` — a green
+  log does not mean they exist. Check the output dir.
+- One export pipeline (`features/export/`), two callers: popup via the content script,
+  browse directly from the extension origin. They each had a private copy once and
+  drifted badly. They must not diverge again.
+- All claude.ai HTTP lives in `features/conversation/api.ts`. `CONVERSATION_QUERY`
+  must keep exactly one definition — ADR-0002 ties the Chat Cache's
+  `requestSignature` to that exact string.
+- Firefox MV3 host permissions are optional and user-revocable, so the extension can
+  be installed yet unable to reach claude.ai. Detect and request; never fail silently.
+  Chrome always reports granted.
 - The content script has a double-injection guard
   (`window.claudeExporterContentScriptLoaded`).
 

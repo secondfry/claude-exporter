@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.11.0]
+
+Structural release. No new user-facing features; the parts that changed behaviour are listed under "Behaviour changes" below.
+
+- **One source tree.** The hand-synced `chrome/` + `firefox/` duplicate trees are gone, replaced by a single TypeScript tree in `src/` built by Vite into `dist/chrome/` and `dist/firefox/`. Measured divergence between the two old trees was ~15 lines, but keeping them in sync was this project's largest historical source of bugs. See ADR-0001.
+- **Firefox migrated MV2 → MV3.** Both targets are now MV3 and differ only by manifest: Chrome uses `background.service_worker`, Firefox an event page. Firefox `strict_min_version` is now 109.
+- **`utils.js` is gone**, split into `src/features/` modules: `conversation/` (types + all claude.ai HTTP), `export/`, `rendering/`, `artifacts/`, `models/`, `tracking/`, `backup/`, `diagnostics/`. Browser API differences are confined to `src/platform/`.
+- **One export pipeline.** `browse.js` and `content.js` each carried their own copy and had drifted: browse fetched 3-at-a-time with DEFLATE compression, filename sanitisation and a progress modal; content was strictly serial with 500 ms sleeps, no compression and no sanitisation. Both now call `features/export`, taking browse's behaviour.
+- `jszip` is an npm dependency inlined into the bundles, not a vendored `jszip.min.js`.
+- Test suite grew from 54 to 134 tests, now covering backup merge semantics, export filenames, the export pipeline, the API layer and Export Record tracking — all previously untested.
+
+**Behaviour changes**
+
+- Popup "Export All" now fetches 3 conversations at a time instead of 1-every-500 ms — roughly 7× faster, but correspondingly more likely to hit claude.ai rate limiting on very large accounts.
+- Popup exports are now DEFLATE-compressed and have their filenames sanitised, matching what the browse page already did.
+- The browse page no longer needs an open claude.ai tab: it fetches directly from the extension origin rather than relaying through the content script.
+- A single conversation that produces exactly one file now downloads that file directly instead of a one-entry ZIP.
+- An export with chats disabled and no artifact options now reports "Nothing to export" instead of silently producing an empty ZIP.
+- Firefox: the options page opens in a tab (`options_ui` with `open_in_tab`) rather than embedded in `about:addons`, where its 810px layout overflowed.
+- Firefox: host permissions are optional and user-revocable under MV3, so popup, browse and options now detect the not-granted state and prompt for access instead of failing silently.
+
+**Fixes**
+
+- Export Records are no longer written for conversations that produced no file. Exporting with chats disabled and artifacts flat previously marked every selected conversation as exported — including the ones with no artifacts, which then stopped showing as needing export.
+- Export Records are keyed by UUID rather than matched by conversation name, so conversations sharing a name no longer suppress each other's records.
+- Cancelling an export during ZIP compression no longer downloads the file anyway.
+- Filenames now come from the conversation's own title as returned by the API, so a chat renamed since the list was loaded exports under its current name.
+
 ## [1.10.17]
 
 - Import Backup now asks merge-vs-replace **before** opening the file picker (was after). Click Import Backup → modal asks "Merge with current data" or "Replace all current data" + "Choose File…" → file picker opens → import runs with the chosen mode. Lets you back out before navigating filesystem, and removes the awkward two-step confirmation. The modal no longer shows file contents (snapshot/export counts, creation date), since the file isn't selected yet — file validation still happens after selection.

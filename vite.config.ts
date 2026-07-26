@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { resolve } from "node:path";
 import { build as viteBuild, defineConfig, type Plugin } from "vite";
 import { getManifest, type Target } from "./src/manifest.config";
@@ -22,27 +23,35 @@ function iifeEntriesPlugin(outDir: string): Plugin {
     name: "claude-exporter-iife-entries",
     apply: "build",
     async closeBundle() {
-      await viteBuild({
-        configFile: false,
-        publicDir: false,
-        build: {
-          outDir,
-          emptyOutDir: false,
-          minify: false,
-          sourcemap: true,
-          rollupOptions: {
-            input: {
-              content: resolve(SRC, "entrypoints/content/index.ts"),
-              background: resolve(SRC, "entrypoints/background/index.ts"),
-            },
-            output: {
-              format: "iife",
-              entryFileNames: "[name].js",
-              inlineDynamicImports: true,
+      // One Rollup build per entry, not one build with two inputs:
+      // inlineDynamicImports is what guarantees a single self-contained file
+      // with no shared chunks (content-script context cannot load them), and
+      // Rollup rejects it outright when more than one input is present.
+      const entries = {
+        content: resolve(SRC, "entrypoints/content/index.ts"),
+        background: resolve(SRC, "entrypoints/background/index.ts"),
+      };
+
+      for (const [name, input] of Object.entries(entries)) {
+        await viteBuild({
+          configFile: false,
+          publicDir: false,
+          build: {
+            outDir,
+            emptyOutDir: false,
+            minify: false,
+            sourcemap: true,
+            rollupOptions: {
+              input,
+              output: {
+                format: "iife",
+                entryFileNames: `${name}.js`,
+                inlineDynamicImports: true,
+              },
             },
           },
-        },
-      });
+        });
+      }
     },
   };
 }
@@ -67,6 +76,47 @@ function staticAssetsPlugin(outDir: string): Plugin {
         resolve(SRC, "entrypoints/content/content.css"),
         resolve(outDir, "content.css"),
       );
+    },
+  };
+}
+
+// Vite's HTML pipeline emits each HTML entry at a path relative to `root`
+// (e.g. dist/chrome/src/entrypoints/popup/popup.html), and rewrites the
+// <script>/<link> references inside it to relative paths that assume that
+// nested location. The manifest requires every emitted file — HTML, JS
+// chunks, CSS — to sit flat at the outDir root. This plugin renames the HTML
+// assets to their basename and rewrites the now-broken relative references
+// inside their source to match, after entryFileNames/chunkFileNames/
+// assetFileNames have already flattened everything else.
+function flattenHtmlPlugin(): Plugin {
+  return {
+    name: "claude-exporter-flatten-html",
+    apply: "build",
+    // Vite's own HTML plugin (vite:build-html) emits the nested HTML asset
+    // in its own generateBundle hook, which — because it's a core plugin —
+    // runs after plugins declared in user config by default. This plugin
+    // must run after that emission to have anything to rename, hence `post`.
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      for (const chunkOrAsset of Object.values(bundle)) {
+        if (chunkOrAsset.type !== "asset") continue;
+        if (!chunkOrAsset.fileName.endsWith(".html")) continue;
+
+        const basename = chunkOrAsset.fileName.split("/").pop() as string;
+        chunkOrAsset.fileName = basename;
+
+        if (typeof chunkOrAsset.source === "string") {
+          // Relative refs point up out of the nested source dir (e.g.
+          // "../../../assets/popup-XXXX.js" or "./popup.css"); once the HTML
+          // itself lives at the outDir root, every referenced asset is a
+          // flat sibling, so any leading "../" segments and "./" prefixes
+          // collapse to a bare filename.
+          chunkOrAsset.source = chunkOrAsset.source.replace(
+            /((?:src|href)=")(?:(?:\.\.\/)+|\.\/)([^"]+)(")/g,
+            "$1$2$3",
+          );
+        }
+      }
     },
   };
 }
@@ -103,9 +153,23 @@ export default defineConfig(({ mode }) => {
           browse: resolve(SRC, "entrypoints/browse/browse.html"),
           options: resolve(SRC, "entrypoints/options/options.html"),
         },
+        output: {
+          entryFileNames: "[name].js",
+          // Shared chunks are derived from module filenames, and nearly every
+          // module here is called index.ts — without the hash Rollup
+          // disambiguates them as index.js/index2.js, so which feature lands
+          // in which file shifts whenever an import is added.
+          chunkFileNames: "chunk-[name]-[hash].js",
+          assetFileNames: "[name][extname]",
+        },
       },
     },
-    plugins: [manifestPlugin(target), staticAssetsPlugin(outDir), iifeEntriesPlugin(outDir)],
+    plugins: [
+      flattenHtmlPlugin(),
+      manifestPlugin(target),
+      staticAssetsPlugin(outDir),
+      iifeEntriesPlugin(outDir),
+    ],
     test: {
       include: ["src/**/*.spec.ts"],
       environment: "node",
