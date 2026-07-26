@@ -6,7 +6,7 @@ const EXTENSION_NAME = 'Claude Exporter';
 
 const GECKO_EXTENSION_ID = '{25798758-c184-470a-bb5b-9fa76a09d9b5}';
 
-function getManifest(target: Target) {
+const getManifest = (target: Target) => {
   const base = {
     action: {
       default_icon: {
@@ -72,7 +72,7 @@ function getManifest(target: Target) {
       },
     },
   };
-}
+};
 
 export { getManifest };
 export type { Target };

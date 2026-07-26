@@ -19,7 +19,7 @@ interface StubArea {
   set(items: StorageRecord): Promise<void>;
 }
 
-function createArea(): StubArea {
+const createArea = (): StubArea => {
   const data: StorageRecord = {};
   return {
     _data: data,
@@ -51,9 +51,9 @@ function createArea(): StubArea {
       Object.assign(data, structuredClone(items));
     },
   };
-}
+};
 
-function createChromeStub() {
+const createChromeStub = () => {
   return {
     permissions: {
       contains: vi.fn(async () => true),
@@ -71,7 +71,7 @@ function createChromeStub() {
     storage: { local: createArea(), sync: createArea() },
     tabs: { create: vi.fn(), query: vi.fn(), sendMessage: vi.fn() },
   };
-}
+};
 
 const chromeStub = createChromeStub();
 

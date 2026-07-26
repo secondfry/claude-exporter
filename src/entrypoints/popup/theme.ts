@@ -1,23 +1,23 @@
 // Theme initialization for popup
 // This runs immediately to sync with browse window theme preference
 
-function applyTheme(theme: string | null): void {
+const applyTheme = (theme: string | null): void => {
   if (theme === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
   } else {
     document.documentElement.removeAttribute('data-theme'); // dark
   }
-}
+};
 
-function toggleTheme(): void {
+const toggleTheme = (): void => {
   const isLight =
     document.documentElement.getAttribute('data-theme') === 'light';
   const next = isLight ? 'dark' : 'light';
   applyTheme(next);
   localStorage.setItem('theme', next);
-}
+};
 
-function initTheme(): void {
+const initTheme = (): void => {
   // Check if user has set a theme in browse window (stored in localStorage)
   const savedTheme = localStorage.getItem('theme');
 
@@ -62,6 +62,6 @@ function initTheme(): void {
         document.documentElement.setAttribute('data-theme', 'light');
       }
     });
-}
+};
 
 export { initTheme, toggleTheme };
