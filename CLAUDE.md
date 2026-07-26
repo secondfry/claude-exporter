@@ -29,6 +29,7 @@ into `dist/chrome/` and `dist/firefox/`. The repo root *is* the extension projec
 |---|---|
 | `npm test` / `npm run test:watch` | Vitest, from repo root |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` / `npm run lint:fix` | ESLint 9 flat config (`eslint.config.ts`) |
 | `npm run build` | both targets into `dist/` |
 | `npm run dev` | chrome build, watch mode |
 
@@ -48,6 +49,13 @@ into `dist/chrome/` and `dist/firefox/`. The repo root *is* the extension projec
   are how the old 1,065-line `utils.js` happened. If it doesn't fit an existing
   feature, it needs a new one.
 - Entrypoints are thin: they wire UI and call `features/`. Logic lives in `features/`.
+- **Never import from a parent directory.** Use the `$`-prefixed aliases —
+  `$features/*`, `$entrypoints/*`, `$platform`. `./sibling` stays relative.
+  `src/manifest.config.ts` is the sole exception: `vite.config.ts` loads it through
+  Vite's esbuild config loader, which resolves no aliases.
+- **Use arrow functions**, not `function` declarations or expressions. Method
+  shorthands and generators are exempt. ~192 pre-existing violations remain; see
+  docs/TODO.md.
 
 ## Domain language
 
@@ -66,6 +74,10 @@ layer, or the browser targets — the rejected alternatives are the useful part.
   more than one input — so that pass runs **once per entry**. Extension pages may use ESM.
 - Each page's HTML must reference its script as exactly
   `<script type="module" src="./index.ts">`. Any other form is silently not bundled.
+- That second pass calls `viteBuild({ configFile: false })`, so it inherits **nothing**
+  from the outer config — no plugins, no resolver. `vite-tsconfig-paths` is registered
+  in both passes for exactly this reason; drop it from the inner one and the pages
+  still build while `content.js`/`background.js` fail on the first aliased import.
 - The build prints "✓ built" *before* emitting `content.js`/`background.js` — a green
   log does not mean they exist. Check the output dir.
 - One export pipeline (`features/export/`), two callers: popup via the content script,

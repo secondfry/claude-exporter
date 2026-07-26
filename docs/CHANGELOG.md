@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.17.0]
+
+**The import rules are now enforced by the build rather than by review.** No behaviour changes; nothing ships differently.
+
+- ESLint 9 flat config in `eslint.config.ts` (TypeScript, loaded through `jiti` — the project bans `.js` sources). `no-restricted-imports` makes parent-relative imports and the forbidden `utils`/`helpers` directory names hard errors, which is what CLAUDE.md always said and nothing ever checked.
+- `$`-prefixed, per-area tsconfig path aliases give those imports somewhere to go: `$features/*`, `$entrypoints/*`, `$platform`. `$` rather than `@` so they cannot be mistaken for npm scopes. All 82 parent-relative specifiers across `src/` were rewritten; sibling imports stay relative on purpose.
+- Alias resolution is wired with `vite-tsconfig-paths` in **both** Vite passes. The IIFE pass that emits `content.js` and `background.js` calls `viteBuild` with `configFile: false` and therefore inherits no plugins at all — an outer-only registration builds the pages fine and then fails to resolve a single aliased import in the two bundles that matter most.
+- `src/manifest.config.ts` is exempted from the import rules: `vite.config.ts` imports it through Vite's bare esbuild config loader, which applies neither tsconfig paths nor plugins, so it is the one module that cannot use an alias.
+- `perfectionist` sorts imports, object literals, interfaces and unions; `eslint-config-prettier` stands down on formatting.
+- `eslint-plugin-tsconfig-paths` is registered but its rule is off — see docs/TODO.md for the three separate reasons.
+- Two temporary severity downgrades sit at the bottom of the config so the gate could be switched on at all: 192 `function` declarations awaiting arrow conversion, and 78 pre-existing type-checked findings. Both are tracked in docs/TODO.md and are to be deleted, not tuned.
+
 ## [1.16.0]
 
 **Feature imports now name what they depend on.** Nine of the ten import edges into `features/conversation` existed because that folder was being used as the place to put anything that mentioned a Conversation, not because callers needed the Conversation domain. No behaviour changes.

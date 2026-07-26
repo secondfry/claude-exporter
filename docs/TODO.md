@@ -29,6 +29,35 @@
 
 ### High Priority 🟠
 
+- **Two temporary blocks at the bottom of `eslint.config.ts`** — both downgrade
+  real rules to warnings so the lint gate could be turned on at all, and both are
+  meant to be deleted, not adjusted.
+
+  1. *Arrow functions.* `no-restricted-syntax` bans `function` declarations and
+     expressions, and 192 currently violate it (191 declarations, 1 expression),
+     with no autofixer. They cluster in `entrypoints/browse/index.ts` (33),
+     `platform/index.ts` (17), `features/tracking/index.ts` (16),
+     `features/cache/db.ts` (11) and `features/backup/index.ts` (10); the rest
+     are spread one to nine per file across every other module. ESLint severity
+     is per-rule rather than per-selector, so the whole rule sits at `warn` until
+     the conversion lands.
+  2. *`recommendedTypeChecked` findings.* 78 pre-existing errors, mostly
+     `no-misused-promises` (17, async handlers passed to `addEventListener`),
+     `require-await` (15) and the `no-unsafe-*` family (~30, `any` escaping from
+     DOM lookups and message responses). The `no-unsafe-*` ones overlap the DOM
+     type-assertion item below and want the same fix — a real guard at the call
+     site, never an assertion. Worst offenders: `features/artifacts/index.ts`
+     (22), `entrypoints/options/index.ts` (12), `features/models/index.spec.ts`
+     (12), `entrypoints/browse/index.ts` (8).
+
+- **`eslint-plugin-tsconfig-paths` is registered but its rule is off** — it cannot
+  be adopted as written. It rewrites *every* relative import including siblings,
+  which this project keeps relative on purpose, and on Windows it feeds
+  `path.normalize`d patterns to picomatch v2, which reads the resulting `\` as an
+  escape character so no alias ever matches. It also still calls
+  `context.getFilename()`, removed in ESLint 10; `eslint.config.ts` proxies that
+  back. Fixing the plugin upstream would let all three workarounds go.
+
 - **`CachePort` is declared by the provider, not the consumer** — `features/export/types.ts`
   imports `CachePort` from `features/cache/messages.ts`, but the port describes what an
   *Export* needs from a cache; `cache` is one of the two adapters satisfying it (local
