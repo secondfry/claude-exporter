@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.0]
+
+**Conversation List extraction.** The browse table's filtering, multi-key sort stack and Selection (shift-range math included) moved out of `browse/index.ts` into a testable `features/conversation/list.ts` — previously this logic only existed inline against the DOM and had no test coverage. 33 new tests now cover shift-range selection and multi-key sorting.
+
+- Selection changes (checkbox click, select-all, "select new/updated") no longer rebuild the whole table. They used to call the same full re-render used for a real View change, which threw away `document.activeElement` on every click (a keyboard user tabbed to a checkbox, pressed Space, and lost their place, dropping to `<body>`) and re-parsed/re-rendered the entire table — a visible freeze on a large conversation list. They now patch the existing checkbox nodes in place.
+- Setting the Export Record book no longer re-filters the View. With the "New/updated" filter active, an exported row used to vanish and the "Showing X of Y" count drop the instant an export completed, and the shift-range anchor silently reset — neither happened before this extraction, so both are now explicitly documented as not-a-recompute in `ConversationList.setExportRecords`.
+- The browse entrypoint no longer keeps its own copies of the Export Record book and the model book alongside the list's — the render path reads them through `list.isStale()`/`list.display()`, so sorting/filtering and rendering can no longer be pointed at different data by a future setter that only updates one side.
+- The list's placeholder Export Record book was a second, divergent definition of "empty" (`isStale: () => true`) from `features/tracking`'s `emptyExportRecords()` (all-false). It now imports the real one.
+
 ## [1.14.0]
 
 **`features/tracking` deepened.** Callers now get a queryable Export Record book (`isStale`, `staleCount`, `size`) instead of a raw `{ uuid: timestamp }` map, and no longer own cache invalidation themselves — `recordExports`/`markExported`/`clearExportRecords` return the post-write book directly.

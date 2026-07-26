@@ -2,9 +2,11 @@
 //
 // Every piece of business logic here lives in features/: the export pipeline
 // (features/export), Export Records and model snapshots (features/tracking),
-// claude.ai HTTP (features/conversation/api), backup (features/backup).
-// This file owns the table, the filters, the selection, the progress modal
-// and the toast — nothing else.
+// claude.ai HTTP (features/conversation/api), filtering/sorting/Selection
+// (features/conversation/list), backup (features/backup). This file owns DOM
+// helpers, theme, date/time preferences, page lifecycle, data loading, TABLE
+// RENDERING, the progress modal, export orchestration, toasts and event
+// wiring — nothing else.
 
 import {
   getExtensionUrl,
@@ -20,19 +22,19 @@ import type {
   ConversationSummary,
   ExportFormat,
 } from '../../features/conversation/types';
+import { createConversationList } from '../../features/conversation/list';
+import type { SortField, StatusFilter } from '../../features/conversation/list';
 import { localCache } from '../../features/cache';
 import { exportConversations } from '../../features/export/pipeline';
 import type { ExportOptions, ExportProgress, ExportTarget } from '../../features/export/types';
 import {
   recordModelSnapshots,
   loadExportRecords,
-  emptyExportRecords,
   loadModelDisplay,
-  emptyModelDisplay,
   markExported,
   clearExportRecords,
 } from '../../features/tracking';
-import type { ExportRecordBook, ModelDisplayBook } from '../../features/tracking';
+import type { ExportRecordBook } from '../../features/tracking';
 import { formatModelName, getModelBadgeClass, inferModel } from '../../features/models';
 import { backupExtensionData, importBackup, showImportModeModal } from '../../features/backup';
 import type { ImportMode } from '../../features/backup';
@@ -89,31 +91,27 @@ function toggleTheme(): void {
 // State
 // ---------------------------------------------------------------------------
 
-type SortField = 'name' | 'project' | 'created' | 'updated' | 'model';
-type SortDirection = 'asc' | 'desc';
-interface SortCriterion {
-  field: SortField;
-  direction: SortDirection;
-}
-
-type StatusFilter = 'all' | 'new' | 'exported' | 'projects';
-
-/** Default sort, used until the user clicks a column header. */
-const DEFAULT_SORT: SortCriterion = { field: 'updated', direction: 'desc' };
-
-let allConversations: ConversationSummary[] = [];
-let filteredConversations: ConversationSummary[] = [];
-let projectsMap: Record<string, string> = {};
 let orgId: string | null = null;
-let sortStack: SortCriterion[] = [];
-const selectedConversations = new Set<string>();
-let lastCheckedIndex: number | null = null;
-let exportRecords: ExportRecordBook = emptyExportRecords();
-let models: ModelDisplayBook = emptyModelDisplay('original');
-let statusFilter: StatusFilter = 'all';
+// The list is the single source of truth for Conversations, Export Records
+// and models — the render path below reads through it (list.isStale,
+// list.display) rather than keeping a second, independently-updated copy
+// that sorting/filtering and rendering could silently disagree on.
+const list = createConversationList();
 let dateFormat: 'mdy' | 'dmy' = 'mdy';
 let timeFormat: '12h' | '24h' = '12h';
 let modelDisplay: 'original' | 'current' = 'original';
+
+/** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
+function asStatusFilter(value: string | undefined): StatusFilter {
+  return value === 'new' || value === 'exported' || value === 'projects' ? value : 'all';
+}
+
+/** Narrows a `.sortable` header's dataset value to SortField without an `as` assertion. */
+function asSortField(value: string | undefined): SortField | null {
+  return value === 'name' || value === 'project' || value === 'created' || value === 'updated' || value === 'model'
+    ? value
+    : null;
+}
 
 // ---------------------------------------------------------------------------
 // Preferences
@@ -175,10 +173,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   const loadingStart = Date.now();
   await loadOrgId();
-  exportRecords = await loadExportRecords();
+  list.setExportRecords(await loadExportRecords());
   await loadDateTimePrefs();
   await loadModelDisplayPref();
-  models = await loadModelDisplay(modelDisplay);
+  list.setModels(await loadModelDisplay(modelDisplay));
   const elapsed = Date.now() - loadingStart;
   if (elapsed < 1000) await new Promise((r) => setTimeout(r, 1000 - elapsed));
   const loadingText = el('loadingText');
@@ -260,12 +258,13 @@ async function loadProjects(): Promise<void> {
   if (!orgId) return;
   try {
     const projects: Project[] = await fetchProjects(orgId);
-    projectsMap = {};
+    const projectsMap: Record<string, string> = {};
     projects.forEach((project) => {
       const projectId = project.uuid || project.id;
       const projectName = project.name || project.title || 'Untitled Project';
       if (projectId) projectsMap[projectId] = projectName;
     });
+    list.setProjects(projectsMap);
   } catch (error) {
     console.warn('Error loading projects:', error);
   }
@@ -283,141 +282,24 @@ async function loadConversations(): Promise<void> {
     // Best-effort: snapshot recording must never block rendering
     try {
       await recordModelSnapshots(conversations);
-      models = await loadModelDisplay(modelDisplay);
+      list.setModels(await loadModelDisplay(modelDisplay));
     } catch (error) {
       console.error('Error recording model snapshots:', error);
     }
 
     // Infer models for conversations with null model
-    allConversations = conversations.map((conv) => ({
+    const conversationsWithModels = conversations.map((conv) => ({
       ...conv,
       model: inferModel(conv),
     }));
+    list.setConversations(conversationsWithModels);
 
-    applyFiltersAndSort();
+    displayConversations();
+    updateStats();
   } catch (error) {
     console.error('Error loading conversations:', error);
     showError(`Failed to load conversations: ${errorMessage(error)}`);
   }
-}
-
-function getProjectName(conversation: ConversationSummary): string {
-  const projectId =
-    (conversation.project_uuid as string | null | undefined) ||
-    (conversation.project_id as string | null | undefined) ||
-    (conversation.projectUuid as string | null | undefined);
-  if (!projectId) return '-';
-  return projectsMap[projectId] || '-';
-}
-
-// ---------------------------------------------------------------------------
-// Filtering & sorting
-// ---------------------------------------------------------------------------
-
-function applyFiltersAndSort(): void {
-  const searchTerm = req<HTMLInputElement>('searchInput').value.toLowerCase();
-
-  filteredConversations = allConversations.filter((conv) => {
-    // 'projects' mode: search scope becomes the project name, status filters do not apply
-    if (statusFilter === 'projects') {
-      if (!searchTerm) return true;
-      const projectName = getProjectName(conv);
-      return projectName !== '-' && projectName.toLowerCase().includes(searchTerm);
-    }
-
-    const summary = conv.summary as string | null | undefined;
-    const matchesSearch =
-      !searchTerm ||
-      conv.name.toLowerCase().includes(searchTerm) ||
-      (!!summary && summary.toLowerCase().includes(searchTerm));
-
-    let matchesStatus = true;
-    if (statusFilter === 'new') {
-      matchesStatus = exportRecords.isStale(conv);
-    } else if (statusFilter === 'exported') {
-      matchesStatus = !exportRecords.isStale(conv);
-    }
-
-    return matchesSearch && matchesStatus;
-  });
-
-  sortConversations();
-
-  // Reset last checked index when list changes
-  lastCheckedIndex = null;
-
-  displayConversations();
-  updateStats();
-}
-
-function sortValue(conv: ConversationSummary, field: SortField): string | number {
-  switch (field) {
-    case 'name':
-      return conv.name.toLowerCase();
-    case 'project':
-      return getProjectName(conv).toLowerCase();
-    case 'created':
-      return new Date(conv.created_at).getTime();
-    case 'updated':
-      return new Date(conv.updated_at).getTime();
-    case 'model':
-      return formatModelName(models.display(conv).model).toLowerCase();
-  }
-}
-
-function sortConversations(): void {
-  // If sortStack is empty, fall back to the default sort
-  if (sortStack.length === 0) {
-    sortStack = [{ ...DEFAULT_SORT }];
-  }
-
-  filteredConversations.sort((a, b) => {
-    // Try each sort criterion in order until we find a difference
-    for (const { field, direction } of sortStack) {
-      const aVal = sortValue(a, field);
-      const bVal = sortValue(b, field);
-
-      let comparison = 0;
-      if (aVal > bVal) comparison = 1;
-      else if (aVal < bVal) comparison = -1;
-
-      if (comparison !== 0) {
-        return direction === 'asc' ? comparison : -comparison;
-      }
-    }
-    return 0;
-  });
-}
-
-function handleColumnSort(field: SortField): void {
-  const existingIndex = sortStack.findIndex((s) => s.field === field);
-
-  if (existingIndex === 0) {
-    // Clicking primary sort: toggle direction
-    sortStack[0]!.direction = sortStack[0]!.direction === 'asc' ? 'desc' : 'asc';
-  } else if (existingIndex > 0) {
-    // Clicking a secondary sort: move it to primary position
-    const [sortCriterion] = sortStack.splice(existingIndex, 1);
-    sortStack.unshift(sortCriterion!);
-  } else {
-    // New sort: add to front with ascending direction
-    sortStack.unshift({ field, direction: 'asc' });
-  }
-
-  applyFiltersAndSort();
-}
-
-function getSortIndicator(field: SortField): string {
-  const sortIndex = sortStack.findIndex((s) => s.field === field);
-
-  // Only show indicator for the primary (most recent) sort
-  if (sortIndex !== 0) return '';
-
-  const { direction } = sortStack[sortIndex]!;
-  const primaryArrow = direction === 'asc' ? '↑' : '↓';
-  const secondaryArrow = direction === 'asc' ? '↓' : '↑';
-
-  return ` <span class="sort-indicator">${primaryArrow}<sub>${secondaryArrow}</sub></span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -426,8 +308,9 @@ function getSortIndicator(field: SortField): string {
 
 function displayConversations(): void {
   const tableContent = req('tableContent');
+  const view = list.view();
 
-  if (filteredConversations.length === 0) {
+  if (view.length === 0) {
     tableContent.innerHTML = '<div class="no-results">No conversations found</div>';
     return;
   }
@@ -436,32 +319,32 @@ function displayConversations(): void {
     <table>
       <thead>
         <tr>
-          <th class="sortable" data-sort="name">Name${getSortIndicator('name')}</th>
-          <th class="sortable" data-sort="project">Project${getSortIndicator('project')}</th>
-          <th class="sortable" data-sort="updated">Updated${getSortIndicator('updated')}</th>
-          <th class="sortable" data-sort="created">Created${getSortIndicator('created')}</th>
-          <th class="sortable" data-sort="model">Model${getSortIndicator('model')}</th>
+          <th class="sortable" data-sort="name">Name${list.sortIndicator('name')}</th>
+          <th class="sortable" data-sort="project">Project${list.sortIndicator('project')}</th>
+          <th class="sortable" data-sort="updated">Updated${list.sortIndicator('updated')}</th>
+          <th class="sortable" data-sort="created">Created${list.sortIndicator('created')}</th>
+          <th class="sortable" data-sort="model">Model${list.sortIndicator('model')}</th>
           <th>Actions</th>
           <th class="checkbox-col">
-            <input type="checkbox" id="selectAll" class="select-all-checkbox" ${selectedConversations.size > 0 ? 'checked' : ''}>
+            <input type="checkbox" id="selectAll" class="select-all-checkbox" ${list.allViewSelected() ? 'checked' : ''}>
           </th>
         </tr>
       </thead>
       <tbody>
   `;
 
-  filteredConversations.forEach((conv, index) => {
+  view.forEach((conv, index) => {
     const updatedDt = new Date(conv.updated_at);
     const createdDt = new Date(conv.created_at);
     const updatedDate = formatDate(updatedDt);
     const updatedTime = formatTime(updatedDt);
     const createdDate = formatDate(createdDt);
     const createdTime = formatTime(createdDt);
-    const modelInfo = models.display(conv);
+    const modelInfo = list.display(conv);
     const modelBadgeClass = getModelBadgeClass(modelInfo.model);
-    const projectName = getProjectName(conv);
+    const projectName = list.projectName(conv);
 
-    const newUpdated = exportRecords.isStale(conv);
+    const newUpdated = list.isStale(conv);
     html += `
       <tr data-id="${escapeHtml(conv.uuid)}">
         <td>
@@ -490,7 +373,7 @@ function displayConversations(): void {
           </div>
         </td>
         <td class="checkbox-col">
-          <input type="checkbox" class="conversation-checkbox" data-id="${escapeHtml(conv.uuid)}" data-index="${index}" ${selectedConversations.has(conv.uuid) ? 'checked' : ''}>
+          <input type="checkbox" class="conversation-checkbox" data-id="${escapeHtml(conv.uuid)}" data-index="${index}" ${list.selected().has(conv.uuid) ? 'checked' : ''}>
         </td>
       </tr>
     `;
@@ -512,7 +395,7 @@ function displayConversations(): void {
       // Take updated_at from the loaded list rather than the button's dataset:
       // it is what decides whether the Chat Cache may answer instead of the
       // network, so it must come from the same source the table rendered.
-      const conv = allConversations.find((candidate) => candidate.uuid === id);
+      const conv = list.all().find((candidate) => candidate.uuid === id);
       void exportSingle({
         uuid: id,
         name: btn.dataset.name || id,
@@ -533,8 +416,12 @@ function displayConversations(): void {
 
   document.querySelectorAll<HTMLElement>('.sortable').forEach((header) => {
     header.addEventListener('click', () => {
-      const field = header.dataset.sort;
-      if (field) handleColumnSort(field as SortField);
+      const field = asSortField(header.dataset.sort);
+      if (field) {
+        list.toggleSort(field);
+        displayConversations();
+        updateStats();
+      }
     });
   });
 
@@ -548,103 +435,65 @@ function displayConversations(): void {
 // Selection
 // ---------------------------------------------------------------------------
 
+// Selection changes must NOT rebuild the table: displayConversations()
+// replaces tableContent's innerHTML, which destroys the very <input> the
+// click/change event fired on. That drops keyboard focus to <body> (a
+// keyboard user tabbed to a checkbox, pressed Space, and now has to re-tab
+// from the top of the document for every row) and re-parses/re-renders
+// potentially thousands of rows on every single click. The list's state is
+// already updated by this point, so just paint that state onto the existing
+// DOM nodes.
+function syncSelectionDom(): void {
+  document.querySelectorAll<HTMLInputElement>('.conversation-checkbox').forEach((checkbox) => {
+    const id = checkbox.dataset.id;
+    checkbox.checked = !!id && list.selected().has(id);
+  });
+
+  const selectAllCheckbox = el<HTMLInputElement>('selectAll');
+  if (selectAllCheckbox) selectAllCheckbox.checked = list.allViewSelected();
+}
+
 function handleCheckboxChange(e: MouseEvent): void {
-  const checkbox = e.currentTarget as HTMLInputElement;
+  if (!(e.currentTarget instanceof HTMLInputElement)) return;
+  const checkbox = e.currentTarget;
   const conversationId = checkbox.dataset.id;
   const currentIndex = parseInt(checkbox.dataset.index || '', 10);
+  if (!conversationId) return;
 
-  // Handle shift+click for range selection
-  if (e.shiftKey && lastCheckedIndex !== null) {
-    const start = Math.min(lastCheckedIndex, currentIndex);
-    const end = Math.max(lastCheckedIndex, currentIndex);
+  list.check(conversationId, currentIndex, e.shiftKey);
 
-    const checkboxes = document.querySelectorAll<HTMLInputElement>('.conversation-checkbox');
-    const isChecking = checkbox.checked;
-
-    for (let i = start; i <= end; i++) {
-      const cb = checkboxes[i];
-      if (!cb) continue;
-      cb.checked = isChecking;
-      const id = cb.dataset.id;
-      if (!id) continue;
-      if (isChecking) {
-        selectedConversations.add(id);
-      } else {
-        selectedConversations.delete(id);
-      }
-    }
-  } else if (conversationId) {
-    // Normal single checkbox toggle
-    if (checkbox.checked) {
-      selectedConversations.add(conversationId);
-    } else {
-      selectedConversations.delete(conversationId);
-    }
-  }
-
-  lastCheckedIndex = currentIndex;
-
+  syncSelectionDom();
   updateExportButtonText();
-  updateSelectAllCheckbox();
 }
 
 function handleSelectAll(e: Event): void {
-  const target = e.currentTarget as HTMLInputElement;
-  const checkboxes = document.querySelectorAll<HTMLInputElement>('.conversation-checkbox');
+  if (!(e.currentTarget instanceof HTMLInputElement)) return;
 
-  if (target.checked) {
-    // Select all visible conversations
-    checkboxes.forEach((checkbox) => {
-      checkbox.checked = true;
-      if (checkbox.dataset.id) selectedConversations.add(checkbox.dataset.id);
-    });
-  } else {
-    // Deselect all
-    checkboxes.forEach((checkbox) => {
-      checkbox.checked = false;
-    });
-    selectedConversations.clear();
-  }
+  list.checkAll(e.currentTarget.checked);
 
-  // Reset last checked index when using select all
-  lastCheckedIndex = null;
-
+  syncSelectionDom();
   updateExportButtonText();
-}
-
-function updateSelectAllCheckbox(): void {
-  const selectAllCheckbox = el<HTMLInputElement>('selectAll');
-  if (!selectAllCheckbox) return;
-
-  // Show header checkbox as checked when any conversations are selected
-  selectAllCheckbox.checked = selectedConversations.size > 0;
 }
 
 function updateExportButtonText(): void {
   const exportBtn = el<HTMLButtonElement>('exportAllBtn');
   if (!exportBtn) return;
 
-  exportBtn.textContent =
-    selectedConversations.size > 0
-      ? `Export Selected (${selectedConversations.size})`
-      : 'Export All';
+  const count = list.selectedCount();
+  exportBtn.textContent = count > 0 ? `Export Selected (${count})` : 'Export All';
 }
 
 function updateStats(): void {
   const stats = el('stats');
   if (!stats) return;
-  const newCount = exportRecords.staleCount(allConversations);
-  stats.textContent = `Showing ${filteredConversations.length} of ${allConversations.length} conversations (${newCount} new/updated)`;
+  stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.staleCount()} new/updated)`;
 }
 
 function autoSelectNewUpdated(): void {
-  selectedConversations.clear();
-  filteredConversations.forEach((conv) => {
-    if (exportRecords.isStale(conv)) {
-      selectedConversations.add(conv.uuid);
-    }
-  });
-  displayConversations();
+  // Only the Selection changes here, not the View — same in-place treatment
+  // as handleCheckboxChange/handleSelectAll.
+  list.selectStale();
+  syncSelectionDom();
   updateExportButtonText();
 }
 
@@ -724,7 +573,7 @@ function isAbort(error: unknown): boolean {
 
 /** Apply a freshly-loaded Export Record book and repaint the table's staleness state. */
 function applyExportRecords(book: ExportRecordBook): void {
-  exportRecords = book;
+  list.setExportRecords(book);
   displayConversations();
   updateStats();
 }
@@ -774,9 +623,7 @@ async function exportAllFiltered(): Promise<void> {
   // view. The "Export Selected (N)" button text already reflects the full
   // selection count, so users aren't surprised.
   const conversationsToExport =
-    selectedConversations.size > 0
-      ? allConversations.filter((conv) => selectedConversations.has(conv.uuid))
-      : filteredConversations;
+    list.selectedCount() > 0 ? list.all().filter((conv) => list.selected().has(conv.uuid)) : list.view();
 
   const targets: ExportTarget[] = conversationsToExport.map((conv) => ({
     uuid: conv.uuid,
@@ -958,7 +805,7 @@ function setupEventListeners(): void {
 
   // Mark all as exported
   req('markAllExported').addEventListener('click', async () => {
-    const ids = allConversations.map((c) => c.uuid);
+    const ids = list.all().map((c) => c.uuid);
     applyExportRecords(await markExported(ids));
     settingsDropdown.classList.remove('open');
     showToast(`Marked ${ids.length} conversations as exported`);
@@ -967,7 +814,7 @@ function setupEventListeners(): void {
   // Mark all as new
   req('markAllNew').addEventListener('click', async () => {
     applyExportRecords(await clearExportRecords());
-    selectedConversations.clear();
+    list.clearSelection();
     autoSelectNewUpdated();
     settingsDropdown.classList.remove('open');
     showToast('All conversations marked as new');
@@ -1009,14 +856,18 @@ function setupEventListeners(): void {
   const searchBox = req('searchBox');
   searchInput.addEventListener('input', () => {
     searchBox.classList.toggle('has-text', !!searchInput.value);
-    applyFiltersAndSort();
+    list.setSearch(searchInput.value);
+    displayConversations();
+    updateStats();
   });
 
   // Clear search
   req('clearSearch').addEventListener('click', () => {
     searchInput.value = '';
     searchBox.classList.remove('has-text');
-    applyFiltersAndSort();
+    list.setSearch('');
+    displayConversations();
+    updateStats();
   });
 
   // Filter dropdown
@@ -1037,19 +888,18 @@ function setupEventListeners(): void {
 
   document.querySelectorAll<HTMLElement>('.filter-option').forEach((option) => {
     option.addEventListener('click', () => {
-      statusFilter = (option.dataset.value || 'all') as StatusFilter;
+      const statusFilter = asStatusFilter(option.dataset.value);
+      list.setStatusFilter(statusFilter);
       // Update selected state
       document.querySelectorAll('.filter-option').forEach((o) => o.classList.remove('selected'));
       option.classList.add('selected');
       // Search bar placeholder reflects the active scope
-      searchInput.placeholder =
-        statusFilter === 'projects'
-          ? 'Search projects by name...'
-          : 'Search conversations by name...';
+      searchInput.placeholder = list.searchPlaceholder();
       // Update button state
       filterBtn.classList.toggle('active', statusFilter !== 'all');
       filterDropdown.classList.remove('open');
-      applyFiltersAndSort();
+      displayConversations();
+      updateStats();
     });
   });
 

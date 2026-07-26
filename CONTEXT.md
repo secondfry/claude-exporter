@@ -38,6 +38,14 @@ _Avoid_: stale entry, dead cache entry, garbage
 A user-initiated snapshot of the extension's own settings and Export Records, for moving between machines.
 _Avoid_: export (see Flagged ambiguities)
 
+**Selection**:
+The set of Conversations the user has picked for the next Export.
+_Avoid_: checked, marked
+
+**View**:
+The filtered and sorted subset of Conversations currently displayed.
+_Avoid_: list, table, results
+
 ## Relationships
 
 - A **Conversation** has at most one **Export Record** and at most one **Chat Cache** entry
@@ -46,6 +54,8 @@ _Avoid_: export (see Flagged ambiguities)
 - An **Export** writes an **Export Record** for every **Conversation** it succeeds on
 - A **Backup** carries **Export Records** but never the **Chat Cache**
 - An **Orphan** can never become **Stale**, since nothing upstream can change it
+- A **Selection** persists across changes to the **View**; it is not limited to what the **View** currently shows
+- The **View** is derived from all Conversations by filtering and sorting; the **Selection** is a separate, user-chosen set
 
 ## Example dialogue
 
