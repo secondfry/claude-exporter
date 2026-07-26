@@ -1,4 +1,7 @@
-// Shared utility functions for Claude Exporter
+// Renders a Conversation into the text formats an Export can write: Markdown
+// and plain text. JSON needs no rendering — the pipeline writes the fetched
+// Conversation as-is. Only the current branch of the message tree is rendered;
+// alternative branches from edited messages are not part of an Export.
 
 import { getCurrentBranch } from '../conversation/branch';
 import type { Conversation } from '../conversation/types';

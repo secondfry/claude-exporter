@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.16.0]
+
+**Feature imports now name what they depend on.** Nine of the ten import edges into `features/conversation` existed because that folder was being used as the place to put anything that mentioned a Conversation, not because callers needed the Conversation domain. No behaviour changes.
+
+- `ExportFormat`, `ArtifactFormat` and `ArtifactFile` left `conversation/types.ts`, whose own header says it holds shapes returned by the claude.ai API. None of them are: nothing on the wire has those shapes, and what `'markdown'` or `'original'` means is decided entirely inside `features/export` and `features/artifacts`. They now live with the code that gives them meaning.
+- The browse table's view-model moved from `features/conversation/list.ts` to its own `features/conversation-list`. Its imports of `features/tracking` and `features/models` looked like a domain feature reaching upward into presentation concerns; under a truthful name it is a view-model composing two domain features, which is the ordinary direction. The move also exposed a relative import (`./types`) that had been silently resolving to `conversation/types`.
+- `features/conversation/index.ts` — one function under the banner "Shared utility functions", the `utils.js` smell CLAUDE.md bans by name — became `conversation/branch.ts`. No `index.ts` was left behind, so `from '../conversation'` no longer resolves and callers must name the file they want.
+- `features/rendering/index.ts` carried the same inherited "Shared utility functions" banner; it now describes what it does.
+
 ## [1.15.0]
 
 **Conversation List extraction.** The browse table's filtering, multi-key sort stack and Selection (shift-range math included) moved out of `browse/index.ts` into a testable `features/conversation/list.ts` — previously this logic only existed inline against the DOM and had no test coverage. 33 new tests now cover shift-range selection and multi-key sorting.
