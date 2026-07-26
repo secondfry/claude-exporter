@@ -1,0 +1,14 @@
+# Build output — generated, and dist/ is what ships.
+dist/
+releases/
+
+# Dependencies and lockfiles are tool-owned.
+node_modules/
+package-lock.json
+
+# Agent worktrees and scratch state.
+.claude/
+
+# Third-party or vendored assets that must stay byte-identical.
+src/assets/
+LICENSE.md

@@ -4,11 +4,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
-      "$entrypoints/*": ["src/entrypoints/*"],
-      "$features/*": ["src/features/*"],
-      "$platform": ["src/platform"]
+      "$entrypoints/*": ["./src/entrypoints/*"],
+      "$features/*": ["./src/features/*"],
+      "$platform": ["./src/platform"]
     },
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["chrome", "vitest/globals"],

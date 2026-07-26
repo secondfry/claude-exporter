@@ -2,6 +2,7 @@ import type { ESLint, Linter, Rule } from 'eslint';
 import prettier from 'eslint-config-prettier';
 import perfectionist from 'eslint-plugin-perfectionist';
 import tsconfigPaths from 'eslint-plugin-tsconfig-paths';
+import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
 // Perfectionist's own option types are not exported per-rule, so the shared
@@ -92,7 +93,7 @@ const functionExpressionSelector = {
     ':not(MethodDefinition, Property[method=true]) > FunctionExpression:not([generator=true])',
 };
 
-const config = tseslint.config(
+const config = defineConfig(
   {
     ignores: ['.claude/**', 'dist/**', 'node_modules/**'],
   },
