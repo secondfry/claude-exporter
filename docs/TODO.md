@@ -29,10 +29,20 @@
 
 ### High Priority 🟠
 
-- **Route `features/backup/` and `features/diagnostics/` through `src/platform/`** — both
-  still call `chrome.*` directly, contradicting the rule that browser differences live
-  only in `platform/`. Works today via Firefox's `chrome` alias, but they bypass the
-  `globalThis.browser ?? chrome` preference every other module uses.
+- **`CachePort` is declared by the provider, not the consumer** — `features/export/types.ts`
+  imports `CachePort` from `features/cache/messages.ts`, but the port describes what an
+  *Export* needs from a cache; `cache` is one of the two adapters satisfying it (local
+  and relayed-through-background, per ADR-0003). As written, changing what the pipeline
+  requires means editing `cache`, and any test double is typed by the module it stands
+  in for. Moving the declaration into `features/export` would invert that; it is a real
+  two-adapter seam, so only the ownership is wrong, not the design.
+
+- **DOM type assertions in `entrypoints/popup` and `entrypoints/options`** — roughly
+  thirty `getElementById(...) as HTMLInputElement`, the last holdouts against the
+  type-assertion ban in CLAUDE.md. `features/` and `platform/` are clean. Needs a
+  guarded lookup helper rather than thirty individual guards; overlaps with the
+  question of where shared entrypoint UI code is allowed to live, given there is no
+  `shared/`.
 
 - **Replace the batches-of-3 export loop with a continuous concurrency limiter** — the
   current pipeline runs `Promise.all` over batches of 3 with a 200 ms inter-batch delay,
