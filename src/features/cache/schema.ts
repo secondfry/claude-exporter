@@ -48,16 +48,19 @@ interface CacheRecord {
  * parsed dates keeps a reformatted timestamp a miss, which costs one fetch;
  * the alternative failure costs the user data they think they have.
  */
-function isFresh(
+const isFresh = (
   record: CacheRecord | undefined,
   updatedAt: string | undefined,
-): boolean {
+): boolean => {
   if (!record || !updatedAt) return false;
   if (record.requestSignature !== REQUEST_SIGNATURE) return false;
   return record.updatedAt === updatedAt;
-}
+};
 
-function toRecord(conversation: Conversation, storedAt: number): CacheRecord {
+const toRecord = (
+  conversation: Conversation,
+  storedAt: number,
+): CacheRecord => {
   return {
     conversation,
     requestSignature: REQUEST_SIGNATURE,
@@ -65,7 +68,7 @@ function toRecord(conversation: Conversation, storedAt: number): CacheRecord {
     updatedAt: conversation.updated_at,
     uuid: conversation.uuid,
   };
-}
+};
 
 export {
   DB_NAME,

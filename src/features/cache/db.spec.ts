@@ -19,7 +19,7 @@ import {
 import { readConversation, writeConversation } from './index';
 import { REQUEST_SIGNATURE, toRecord } from './schema';
 
-function conversation(overrides: Partial<Conversation> = {}): Conversation {
+const conversation = (overrides: Partial<Conversation> = {}): Conversation => {
   return {
     chat_messages: [],
     created_at: '2026-01-01T00:00:00.000000Z',
@@ -28,7 +28,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     uuid: 'conv-1',
     ...overrides,
   };
-}
+};
 
 afterEach(async () => {
   await clearRecords().catch(() => undefined);

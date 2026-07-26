@@ -26,10 +26,10 @@ import type {
 } from './messages';
 import { isFresh, toRecord } from './schema';
 
-async function readConversation(
+const readConversation = async (
   uuid: string,
   updatedAt: string | undefined,
-): Promise<Conversation | null> {
+): Promise<Conversation | null> => {
   if (!updatedAt) return null;
   try {
     const record = await getRecord(uuid);
@@ -38,11 +38,11 @@ async function readConversation(
     console.warn('Chat Cache read failed; refetching', error);
     return null;
   }
-}
+};
 
-async function writeConversation(
+const writeConversation = async (
   conversation: Conversation,
-): Promise<CacheWriteStatus> {
+): Promise<CacheWriteStatus> => {
   if (!conversation?.uuid || !conversation.updated_at) return 'unavailable';
   try {
     return (await putRecord(toRecord(conversation, Date.now())))
@@ -52,9 +52,9 @@ async function writeConversation(
     console.warn('Chat Cache write failed; export unaffected', error);
     return 'unavailable';
   }
-}
+};
 
-async function cacheStats(): Promise<CacheStats> {
+const cacheStats = async (): Promise<CacheStats> => {
   let entries = 0;
   try {
     entries = await countRecords();
@@ -73,11 +73,11 @@ async function cacheStats(): Promise<CacheStats> {
   }
 
   return { entries, quotaExceeded: isQuotaExceeded(), usageBytes };
-}
+};
 
-async function clearCache(): Promise<void> {
+const clearCache = async (): Promise<void> => {
   await clearRecords();
-}
+};
 
 /** For contexts sharing the extension origin: the browse page and background. */
 const localCache: CachePort = {
@@ -85,14 +85,14 @@ const localCache: CachePort = {
   write: writeConversation,
 };
 
-async function ask<T>(request: CacheRequest): Promise<T | null> {
+const ask = async <T>(request: CacheRequest): Promise<T | null> => {
   try {
     return await sendMessageToRuntime<T>(request);
   } catch (error) {
     console.warn('Chat Cache is unreachable; continuing uncached', error);
     return null;
   }
-}
+};
 
 /**
  * For the content script, whose claude.ai origin has a different IndexedDB

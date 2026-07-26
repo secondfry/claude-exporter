@@ -27,19 +27,19 @@ let quotaExceeded = false;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function isQuotaError(error: unknown): boolean {
+const isQuotaError = (error: unknown): boolean => {
   return error instanceof DOMException && error.name === 'QuotaExceededError';
-}
+};
 
-function promisify<T>(request: IDBRequest<T>): Promise<T> {
+const promisify = <T>(request: IDBRequest<T>): Promise<T> => {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
       reject(request.error ?? new Error('IndexedDB request failed'));
   });
-}
+};
 
-function openDatabase(): Promise<IDBDatabase> {
+const openDatabase = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -71,7 +71,7 @@ function openDatabase(): Promise<IDBDatabase> {
       resolve(db);
     };
   });
-}
+};
 
 /**
  * Drop every record if the request shape changed since they were written.
@@ -81,7 +81,7 @@ function openDatabase(): Promise<IDBDatabase> {
  * refuses to serve them; this reclaims the space they occupy, which at
  * cache-sized volumes is the difference that matters.
  */
-async function enforceSignature(db: IDBDatabase): Promise<void> {
+const enforceSignature = async (db: IDBDatabase): Promise<void> => {
   const tx = db.transaction([STORE_NAME, META_STORE_NAME], 'readwrite');
   const meta = tx.objectStore(META_STORE_NAME);
   const stored = await promisify<string | undefined>(meta.get(SIGNATURE_KEY));
@@ -90,9 +90,9 @@ async function enforceSignature(db: IDBDatabase): Promise<void> {
     tx.objectStore(STORE_NAME).clear();
     meta.put(REQUEST_SIGNATURE, SIGNATURE_KEY);
   }
-}
+};
 
-function getDatabase(): Promise<IDBDatabase> {
+const getDatabase = (): Promise<IDBDatabase> => {
   if (!dbPromise) {
     dbPromise = openDatabase()
       .then(async (db) => {
@@ -106,18 +106,18 @@ function getDatabase(): Promise<IDBDatabase> {
       });
   }
   return dbPromise;
-}
+};
 
-async function getRecord(uuid: string): Promise<CacheRecord | undefined> {
+const getRecord = async (uuid: string): Promise<CacheRecord | undefined> => {
   const db = await getDatabase();
   const tx = db.transaction(STORE_NAME, 'readonly');
   return promisify<CacheRecord | undefined>(
     tx.objectStore(STORE_NAME).get(uuid),
   );
-}
+};
 
 /** Resolves false when the write was refused for want of space. */
-async function putRecord(record: CacheRecord): Promise<boolean> {
+const putRecord = async (record: CacheRecord): Promise<boolean> => {
   if (quotaExceeded) return false;
 
   try {
@@ -132,30 +132,30 @@ async function putRecord(record: CacheRecord): Promise<boolean> {
     }
     throw error;
   }
-}
+};
 
-async function clearRecords(): Promise<void> {
+const clearRecords = async (): Promise<void> => {
   const db = await getDatabase();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   await promisify(tx.objectStore(STORE_NAME).clear());
   quotaExceeded = false;
-}
+};
 
-async function countRecords(): Promise<number> {
+const countRecords = async (): Promise<number> => {
   const db = await getDatabase();
   const tx = db.transaction(STORE_NAME, 'readonly');
   return promisify(tx.objectStore(STORE_NAME).count());
-}
+};
 
-function isQuotaExceeded(): boolean {
+const isQuotaExceeded = (): boolean => {
   return quotaExceeded;
-}
+};
 
 /** Test seam: forget the cached connection and the quota latch. */
-function resetForTests(): void {
+const resetForTests = (): void => {
   dbPromise = null;
   quotaExceeded = false;
-}
+};
 
 export {
   clearRecords,

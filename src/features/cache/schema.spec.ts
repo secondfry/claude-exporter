@@ -6,7 +6,7 @@ import type { Conversation } from '$features/conversation/types';
 import { isFresh, REQUEST_SIGNATURE, toRecord } from './schema';
 import type { CacheRecord } from './schema';
 
-function conversation(overrides: Partial<Conversation> = {}): Conversation {
+const conversation = (overrides: Partial<Conversation> = {}): Conversation => {
   return {
     chat_messages: [],
     created_at: '2026-01-01T00:00:00.000000Z',
@@ -15,11 +15,11 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     uuid: 'conv-1',
     ...overrides,
   };
-}
+};
 
-function record(overrides: Partial<CacheRecord> = {}): CacheRecord {
+const record = (overrides: Partial<CacheRecord> = {}): CacheRecord => {
   return { ...toRecord(conversation(), 1000), ...overrides };
-}
+};
 
 describe('REQUEST_SIGNATURE', () => {
   it('is derived from the one CONVERSATION_QUERY definition', () => {
