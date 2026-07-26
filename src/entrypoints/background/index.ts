@@ -28,7 +28,7 @@ const CONTENT_SCRIPT_FILES = ['content.js'];
 
 const CLAUDE_TABS_QUERY = { url: 'https://claude.ai/*' };
 
-async function injectInto(tabId: number | undefined): Promise<void> {
+const injectInto = async (tabId: number | undefined): Promise<void> => {
   if (tabId === undefined) return;
   try {
     await injectScript(tabId, CONTENT_SCRIPT_FILES);
@@ -37,7 +37,7 @@ async function injectInto(tabId: number | undefined): Promise<void> {
     // mid-injection. The content script's own guard covers the duplicate case.
     console.log('Could not inject content script into tab', tabId, error);
   }
-}
+};
 
 // Fresh page loads are handled by the manifest; this covers claude.ai tabs
 // that were already open when the extension was installed or updated.
@@ -52,11 +52,11 @@ onInstalled(() => {
 
 // The popup asks for this before messaging the content script, since the tab
 // may predate the extension (or the script may have been evicted).
-async function ensureContentScript(): Promise<{ success: true }> {
+const ensureContentScript = async (): Promise<{ success: true }> => {
   const tabs = await queryTabs({ active: true, currentWindow: true });
   await injectInto(tabs[0]?.id);
   return { success: true };
-}
+};
 
 onMessage((request: EnsureContentScriptRequest) => {
   if (request?.action !== 'ensureContentScript') return undefined;
@@ -73,7 +73,7 @@ onMessage((request: EnsureContentScriptRequest) => {
  * chrome.storage.local. Serving it from here costs one structured clone of the
  * JSON per conversation, which is cheap next to the fetch it replaces.
  */
-function routeCache(request: CacheRequest): Promise<unknown> | undefined {
+const routeCache = (request: CacheRequest): Promise<unknown> | undefined => {
   switch (request?.action) {
     case 'cacheClear':
       return clearCache().then(() => ({ success: true }));
@@ -98,7 +98,7 @@ function routeCache(request: CacheRequest): Promise<unknown> | undefined {
     default:
       return undefined;
   }
-}
+};
 
 onMessage(routeCache);
 

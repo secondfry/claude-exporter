@@ -50,7 +50,7 @@ const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   includeThinking: false,
 };
 
-function resolveOptions(message: ExportOptionsMessage): ExportOptions {
+const resolveOptions = (message: ExportOptionsMessage): ExportOptions => {
   return {
     artifactFormat:
       message.artifactFormat ?? DEFAULT_EXPORT_OPTIONS.artifactFormat,
@@ -67,14 +67,14 @@ function resolveOptions(message: ExportOptionsMessage): ExportOptions {
     includeThinking:
       message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
   };
-}
+};
 
 // The pipeline reports partial failures instead of throwing, so a bulk export
 // can succeed for most conversations and still say what it lost.
-function toExportResponse(
+const toExportResponse = (
   result: ExportResult,
   attempted: number,
-): ExportResponse {
+): ExportResponse => {
   const response: ExportResponse = {
     count: result.exportedIds.length,
     filename: result.filename,
@@ -86,11 +86,11 @@ function toExportResponse(
       `Some failed: ${result.failedNames.join('; ')}`;
   }
   return response;
-}
+};
 
-async function handleExportConversation(
+const handleExportConversation = async (
   request: ExportConversationRequest,
-): Promise<ExportResponse> {
+): Promise<ExportResponse> => {
   // No updatedAt: the popup exports whatever conversation is on screen without
   // loading the list, so there is nothing to validate a cached copy against and
   // this always refetches. It still populates the cache for later runs.
@@ -107,11 +107,11 @@ async function handleExportConversation(
     },
   );
   return toExportResponse(result, 1);
-}
+};
 
-async function handleExportAllConversations(
+const handleExportAllConversations = async (
   request: ExportAllConversationsRequest,
-): Promise<ExportResponse> {
+): Promise<ExportResponse> => {
   const conversations = await fetchConversationList(request.orgId);
   // Capture current models before any model bounce can rewrite them.
   await recordModelSnapshots(conversations);
@@ -131,12 +131,12 @@ async function handleExportAllConversations(
     },
   );
   return toExportResponse(result, targets.length);
-}
+};
 
 // Returns a promise for actions it owns and undefined for everything else —
 // undefined lets other listeners answer instead. onMessage keeps the message
 // channel open and turns a rejection into { success: false, error }.
-function route(request: ContentRequest): Promise<unknown> | undefined {
+const route = (request: ContentRequest): Promise<unknown> | undefined => {
   switch (request?.action) {
     case 'detectOrgId':
       return detectOrgId().then((orgId) => ({ orgId, success: true }));
@@ -164,13 +164,13 @@ function route(request: ContentRequest): Promise<unknown> | undefined {
     default:
       return undefined;
   }
-}
+};
 
 // A top-level `return` is illegal in a module, so the double-injection guard
 // wraps the side effects instead of skipping the rest of the file. Background
 // re-injects on install/update, which can land on a tab that already has us;
 // without this the page would end up with two message listeners.
-function init(): void {
+const init = (): void => {
   if (window.claudeExporterContentScriptLoaded) {
     console.log(
       'Claude Exporter content script already loaded, skipping re-injection',
@@ -181,7 +181,7 @@ function init(): void {
 
   initErrorCapture('content');
   onMessage(route);
-}
+};
 
 init();
 
