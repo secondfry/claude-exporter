@@ -3,7 +3,7 @@
 // Every piece of business logic here lives in features/: the export pipeline
 // (features/export), Export Records and model snapshots (features/tracking),
 // claude.ai HTTP (features/conversation/api), filtering/sorting/Selection
-// (features/conversation/list), backup (features/backup). This file owns DOM
+// (features/conversation-list), backup (features/backup). This file owns DOM
 // helpers, theme, date/time preferences, page lifecycle, data loading, TABLE
 // RENDERING, the progress modal, export orchestration, toasts and event
 // wiring — nothing else.
@@ -18,8 +18,8 @@ import {
 import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
 import type { Project } from '../../features/conversation/api';
 import type { ConversationSummary } from '../../features/conversation/types';
-import { createConversationList } from '../../features/conversation/list';
-import type { SortField, StatusFilter } from '../../features/conversation/list';
+import { createConversationList } from '../../features/conversation-list';
+import type { SortField, StatusFilter } from '../../features/conversation-list';
 import { localCache } from '../../features/cache';
 import { exportConversations } from '../../features/export/pipeline';
 import type {

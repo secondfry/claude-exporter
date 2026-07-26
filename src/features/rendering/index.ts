@@ -1,6 +1,6 @@
 // Shared utility functions for Claude Exporter
 
-import { getCurrentBranch } from '../conversation';
+import { getCurrentBranch } from '../conversation/branch';
 import type { Conversation } from '../conversation/types';
 import { extractArtifactsFromMessage, isProgrammingLanguage } from '../artifacts';
 

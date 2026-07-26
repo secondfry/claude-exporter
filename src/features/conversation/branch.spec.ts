@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getCurrentBranch } from './index';
+import { getCurrentBranch } from './branch';
 import type { Conversation } from './types';
 
 // Recovered from the pre-split utils.test.js suite. conversation/ was the one

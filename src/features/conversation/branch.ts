@@ -1,4 +1,7 @@
-// Shared utility functions for Claude Exporter
+// Walks a Conversation's message tree from `current_leaf_message_uuid` back to
+// the root via each message's parent link, returning that single branch in
+// chronological order. Claude conversations are trees, not lists: everything
+// that renders or exports one needs the branch the user is actually looking at.
 
 import type { Conversation, ChatMessage } from './types';
 

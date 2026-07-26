@@ -1,6 +1,6 @@
 // Artifact extraction functions for Claude Exporter
 
-import { getCurrentBranch } from '../conversation';
+import { getCurrentBranch } from '../conversation/branch';
 
 import type { ChatMessage, Conversation } from '../conversation/types';
 

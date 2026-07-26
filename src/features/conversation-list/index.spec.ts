@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createConversationList, getProjectName } from './list';
-import type { ConversationList } from './list';
-import type { ConversationSummary } from './types';
+import { createConversationList, getProjectName } from './index';
+import type { ConversationList } from './index';
+import type { ConversationSummary } from '../conversation/types';
 import type { ExportRecordBook } from '../tracking';
 
 function conv(overrides: Partial<ConversationSummary> & { uuid: string }): ConversationSummary {

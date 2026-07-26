@@ -1,10 +1,10 @@
-// The browse table's business logic, extracted so it is testable without a
-// DOM: filtering, the multi-key sort stack, and the Selection (per
-// CONTEXT.md: the set of Conversations the user has picked for the next
-// Export) and its shift-range math. Rendering stays in the browse entrypoint;
+// The browse table's view-model over Conversations: filtering, search, the
+// multi-key sort stack, and the Selection (per CONTEXT.md: the set of
+// Conversations the user has picked for the next Export) and its shift-range
+// math. Rendering stays in the browse entrypoint;
 // this module is pure state + logic — no DOM, no storage, no `chrome`.
 
-import type { ConversationSummary } from './types';
+import type { ConversationSummary } from '../conversation/types';
 import type { ExportRecordBook, DisplayModel } from '../tracking';
 import { emptyExportRecords } from '../tracking';
 import { formatModelName } from '../models';
