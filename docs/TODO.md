@@ -4,42 +4,6 @@
 
 ### Critical Priority 🔴
 
-- **Manual smoke test — Firefox mostly done, Chrome not started.** The signed
-  v1.20.0 build has been running in production Firefox against a live account
-  (1,111 conversations, 62 MB cached). It found one real bug, fixed in v1.21.0:
-  "Previously exported" excluded conversations that had been exported and then
-  edited.
-
-  Verified in Firefox:
-
-  - [x] popup Export Current
-  - [x] popup Export All, including Cache Hits
-  - [x] browse page load, Selection, Export Selected
-  - [x] status filters (pre-v1.21.0 shape — **re-check**, the options changed)
-  - [x] Options save, Test Connection
-  - [x] Backup export
-  - [x] Chat Cache count and Clear Cache button render in Options
-  - [x] continuing one chat on claude.ai refetches only that chat — the check
-        that would catch a loosened `updated_at` comparison, which fails by
-        silently exporting a Conversation missing its newest messages
-  - [x] `claude-exporter-chat-cache` exists only on the extension origin, with
-        nothing of ours under `https://claude.ai` (ADR-0003 confirmed)
-
-  Still unverified **in either browser**:
-
-  - [ ] cancel mid-export
-  - [ ] Backup re-import
-  - [ ] the new status filters: Never exported / Updated since export /
-        Previously exported, with a chat that is exported-then-edited appearing
-        under both of the last two
-  - [ ] Clear Cache drops the count to 0
-  - [ ] Firefox re-prompts after revoking host access in `about:addons`
-
-  **Chrome has never been loaded at all.** Load `dist/chrome/` unpacked and run
-  the whole list above. The JS is identical to Firefox's, so the interesting
-  differences are the MV3 service worker going idle between messages, and host
-  permissions being granted at install rather than optional.
-
 - **Orphans** — conversations in the cache that no longer exist upstream, for which
   the cache is the only remaining copy (ADR-0002 consequence). Nothing surfaces them
   today: the browse table is built from the conversation list, so a deleted chat
@@ -48,6 +12,16 @@
   destroy the last copy of something.
 
 ### High Priority 🟠
+
+- **Smoke test the extension in Chrome — it has never been loaded, once.** Every
+  Chrome claim this project makes rests on typecheck, unit tests and a build-output
+  audit. Load `dist/chrome/` unpacked and walk the same path Firefox passed: popup
+  Export Current and Export All, browse load / Selection / Export Selected, the
+  status filters, Options save and Test Connection, Backup export. The JavaScript is
+  byte-identical to Firefox's, so the differences worth watching are the MV3 service
+  worker going idle between messages (the Chat Cache relay in ADR-0003 depends on it
+  waking correctly) and host permissions being granted at install rather than
+  optional.
 
 - **One temporary block remains at the bottom of `eslint.config.ts`** — it
   downgrades real rules to warnings so the lint gate could be turned on at all,
@@ -155,6 +129,26 @@
   - Consider whether to design light from scratch rather than tweak — current colors feel like dark-mode values dropped onto a light background
 
 ### Medium Priority 🟡
+
+- **Smoke test: cancel a bulk export mid-run.** Never checked in either browser.
+  Cancel is known not to abort in-flight fetches (see the Low Priority item); what
+  is unverified is whether the ZIP is abandoned cleanly and whether Export Records
+  get written for conversations the user cancelled out of.
+
+- **Smoke test: Backup re-import.** Export has been verified in Firefox (1,109 model
+  snapshots, 1,111 Export Records); restore has not been run at all. It overwrites
+  `chrome.storage.local` and `chrome.storage.sync` wholesale, so a failure here is
+  destructive rather than inert — test against a throwaway profile, not the live one.
+
+- **Smoke test: the three-way status filters (v1.21.0).** Verified only in their
+  pre-v1.21.0 two-option shape. Needs a Conversation that is exported-then-edited,
+  confirming it appears under both "Updated since export" and "Previously exported",
+  and is absent from "Never exported".
+
+- **Smoke test: Clear Cache drops the count to 0.** The button and the count render
+  correctly in Options; clicking it has not been tried against a populated cache.
+  Worth pairing with the Orphans item above — today Clear Cache will silently
+  destroy the last remaining copy of a deleted Conversation.
 
 - **Chat Cache — follow-ups** (see [ADR-0002](adr/0002-chat-cache-in-indexeddb.md); each is its own commit, after the cache lands)
   - **Warm cache on a schedule** — walk missing/stale conversations and fill the cache without producing a ZIP, so the export click itself is fast. Cheap once `features/export/` owns the single pipeline
@@ -266,6 +260,24 @@
 (none currently open)
 
 ## Completed ✅
+
+- **Manual smoke test in Firefox** (v1.20.0–v1.21.3)
+  - First time any of this ran in a browser since the v1.11.0 restructure. Signed
+    build, production Firefox, live account of 1,111 conversations / 62 MB cached
+  - Passed: popup Export Current; popup Export All including Cache Hits; browse page
+    load, Selection and Export Selected; Options save and Test Connection; Backup
+    export; Chat Cache count and Clear Cache rendering in Options
+  - **ADR-0002 confirmed** — continuing one conversation on claude.ai refetches that
+    one and no other, so the `updated_at` equality test really does invalidate. The
+    failure it guards against is silent: exporting a Conversation missing its newest
+    messages while reporting success
+  - **ADR-0003 confirmed** — `claude-exporter-chat-cache` exists on the extension
+    origin alone, with nothing of ours in claude.ai's IndexedDB. A per-origin cache
+    would have stored tens of megabytes twice
+  - Found one real bug, fixed in v1.21.0: "Previously exported" excluded
+    Conversations that had been exported and then edited, because `isStale()`
+    answered for both never-exported and Stale
+  - Remaining checks are split across Pending above, by area
 
 - **Single TypeScript source tree, Firefox on MV3, one export pipeline** (v1.11.0)
   - `chrome/` + `firefox/` collapsed into `src/`, built by Vite into `dist/{chrome,firefox}/`. See ADR-0001

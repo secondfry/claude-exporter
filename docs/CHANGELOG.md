@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.21.4]
+
+**The smoke test is no longer one item, and no longer Critical.** It had been a single Critical-priority block since v1.12.0 covering everything from Chrome never being loaded to one unclicked button, which meant it could never be finished and never be dropped — the definition of an item that stops being read. Firefox passed, including both Chat Cache invariants that only a browser can check, so that run moves to Completed as a record of what was actually established.
+
+What remains is split by what it costs and what it risks. Chrome sits in High on its own: nothing about that target has ever been observed running. The four leftover checks are Medium, each stating why it is still worth doing — Backup re-import in particular overwrites storage wholesale, so it needs a throwaway profile rather than the live one.
+
 ## [1.21.3]
 
 **The two Chat Cache invariants that only a browser can check are now confirmed.** Continuing a conversation on claude.ai refetches that conversation and no other, so the `updated_at` equality test in ADR-0002 really does invalidate — the failure mode it guards against is silent, exporting a Conversation missing its newest messages while reporting success. And `claude-exporter-chat-cache` exists solely on the extension origin, with nothing of ours in claude.ai's IndexedDB, which is the whole point of relaying the content script's reads through the background worker per ADR-0003; a second copy would have duplicated tens of megabytes per account.
