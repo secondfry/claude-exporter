@@ -8,8 +8,8 @@
 // is a miss; a cache that cannot be written is a slower next export. Neither
 // is allowed to surface as an export failure.
 
-import type { Conversation } from '../conversation/types';
-import { sendMessageToRuntime } from '../../platform';
+import type { Conversation } from '$features/conversation/types';
+import { sendMessageToRuntime } from '$platform';
 
 import {
   clearRecords,
@@ -18,13 +18,13 @@ import {
   isQuotaExceeded,
   putRecord,
 } from './db';
-import { isFresh, toRecord } from './schema';
 import type {
   CachePort,
   CacheRequest,
   CacheStats,
   CacheWriteStatus,
 } from './messages';
+import { isFresh, toRecord } from './schema';
 
 async function readConversation(
   uuid: string,
@@ -68,7 +68,7 @@ async function cacheStats(): Promise<CacheStats> {
     usageBytes = null;
   }
 
-  return { entries, usageBytes, quotaExceeded: isQuotaExceeded() };
+  return { entries, quotaExceeded: isQuotaExceeded(), usageBytes };
 }
 
 async function clearCache(): Promise<void> {
@@ -98,16 +98,16 @@ async function ask<T>(request: CacheRequest): Promise<T | null> {
 const remoteCache: CachePort = {
   async read(uuid, updatedAt) {
     if (!updatedAt) return null;
-    const response = await ask<{ success: boolean; conversation: Conversation | null }>({
+    const response = await ask<{ conversation: Conversation | null; success: boolean; }>({
       action: 'cacheRead',
-      uuid,
       updatedAt,
+      uuid,
     });
     return response?.success ? response.conversation : null;
   },
 
   async write(conversation) {
-    const response = await ask<{ success: boolean; status: CacheWriteStatus }>({
+    const response = await ask<{ status: CacheWriteStatus; success: boolean; }>({
       action: 'cacheWrite',
       conversation,
     });

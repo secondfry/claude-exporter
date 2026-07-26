@@ -1,26 +1,27 @@
-import { initErrorCapture } from '../../features/diagnostics';
-import { detectOrgId } from '../../features/conversation/api';
 import type {
-  DetectOrgIdRequest,
   DetectOrgIdResponse as ContentDetectOrgIdResponse,
+  ExportResponse as ContentExportResponse,
+  DetectOrgIdRequest,
   ExportAllConversationsRequest,
   ExportConversationRequest,
-  ExportResponse as ContentExportResponse,
   FailureResponse,
-} from '../content/messages';
-import type { ArtifactFormat, ExportFormat } from '../../features/export/types';
+} from '$entrypoints/content/messages';
+import { detectOrgId } from '$features/conversation/api';
+import { initErrorCapture } from '$features/diagnostics';
+import type { ArtifactFormat, ExportFormat } from '$features/export/types';
 import {
-  queryTabs,
-  sendMessageToTab,
-  storageGet,
-  storageSet,
   createTab,
   getExtensionUrl,
   getManifestVersion,
-  openOptionsPage,
   hasClaudeAccess,
+  openOptionsPage,
+  queryTabs,
   requestClaudeAccess,
-} from '../../platform';
+  sendMessageToTab,
+  storageGet,
+  storageSet,
+} from '$platform';
+
 import { initTheme } from './theme';
 
 // Capture unhandled errors for diagnostics (sanitized, stored in chrome.storage.local)
@@ -85,7 +86,7 @@ async function getCurrentConversationId(): Promise<string | null> {
 }
 
 // Show status message
-function showStatus(message: string, type: 'info' | 'success' | 'error' = 'info'): void {
+function showStatus(message: string, type: 'error' | 'info' | 'success' = 'info'): void {
   const statusEl = document.getElementById('status');
   if (!statusEl) return;
   statusEl.className = `status ${type}`;
@@ -197,9 +198,7 @@ document.getElementById('exportCurrent')?.addEventListener('click', async () => 
     const format = (document.getElementById('format') as HTMLSelectElement | null)?.value as
       | ExportFormat
       | undefined;
-    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value as
-      | ArtifactFormat
-      | undefined;
+    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value;
 
     try {
       // tab.title on claude.ai carries a site suffix (e.g. " - Claude") that
@@ -208,16 +207,16 @@ document.getElementById('exportCurrent')?.addEventListener('click', async () => 
       // conversation name is the reliable source (see pipeline.ts).
       const exportConversationRequest: ExportConversationRequest = {
         action: 'exportConversation',
-        conversationId,
-        orgId,
-        format,
-        includeChats: (document.getElementById('includeChats') as HTMLInputElement | null)?.checked,
-        includeThinking: (document.getElementById('includeThinking') as HTMLInputElement | null)?.checked,
-        includeMetadata: (document.getElementById('includeMetadata') as HTMLInputElement | null)?.checked,
-        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
-        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
         artifactFormat,
+        conversationId,
+        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
         flattenArtifacts: (document.getElementById('flattenArtifacts') as HTMLInputElement | null)?.checked,
+        format,
+        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
+        includeChats: (document.getElementById('includeChats') as HTMLInputElement | null)?.checked,
+        includeMetadata: (document.getElementById('includeMetadata') as HTMLInputElement | null)?.checked,
+        includeThinking: (document.getElementById('includeThinking') as HTMLInputElement | null)?.checked,
+        orgId,
       };
       const response = await sendMessageToTab<ExportResponse>(tab.id, exportConversationRequest);
 
@@ -265,21 +264,19 @@ document.getElementById('exportAll')?.addEventListener('click', async () => {
     const format = (document.getElementById('format') as HTMLSelectElement | null)?.value as
       | ExportFormat
       | undefined;
-    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value as
-      | ArtifactFormat
-      | undefined;
+    const artifactFormat = (document.getElementById('artifactFormat') as HTMLSelectElement | null)?.value;
 
     try {
       const exportAllConversationsRequest: ExportAllConversationsRequest = {
         action: 'exportAllConversations',
-        orgId,
+        artifactFormat,
+        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
+        flattenArtifacts: (document.getElementById('flattenArtifacts') as HTMLInputElement | null)?.checked,
         format,
+        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
         includeChats: (document.getElementById('includeChats') as HTMLInputElement | null)?.checked,
         includeMetadata: (document.getElementById('includeMetadata') as HTMLInputElement | null)?.checked,
-        includeArtifacts: (document.getElementById('includeArtifacts') as HTMLInputElement | null)?.checked,
-        extractArtifacts: (document.getElementById('extractArtifacts') as HTMLInputElement | null)?.checked,
-        artifactFormat,
-        flattenArtifacts: (document.getElementById('flattenArtifacts') as HTMLInputElement | null)?.checked,
+        orgId,
       };
       const response = await sendMessageToTab<ExportResponse>(tab.id, exportAllConversationsRequest);
 

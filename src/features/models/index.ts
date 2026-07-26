@@ -1,4 +1,4 @@
-import type { Conversation } from '../conversation/types';
+import type { Conversation } from '$features/conversation/types';
 
 // ----- Model utilities -----
 
@@ -74,4 +74,4 @@ function getModelBadgeClass(model: string | null | undefined): string {
   return '';
 }
 
-export { DEFAULT_MODEL_TIMELINE, inferModel, formatModelName, getModelBadgeClass };
+export { DEFAULT_MODEL_TIMELINE, formatModelName, getModelBadgeClass, inferModel };

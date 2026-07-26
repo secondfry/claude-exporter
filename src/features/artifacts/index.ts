@@ -1,24 +1,23 @@
 // Artifact extraction functions for Claude Exporter
 
-import { getCurrentBranch } from '../conversation/branch';
-
-import type { ChatMessage, Conversation } from '../conversation/types';
+import { getCurrentBranch } from '$features/conversation/branch';
+import type { ChatMessage, Conversation } from '$features/conversation/types';
 
 /** How artifacts are written out: as-authored, or converted to another form. */
 type ArtifactFormat = 'original' | string;
 
 /** An extracted artifact, ready to be written to disk under `filename`. */
 interface ArtifactFile {
-  filename: string;
   content: string;
+  filename: string;
 }
 
 interface Artifact {
-  title: string;
-  language: string;
-  type: string;
-  identifier: string | null;
   content: string;
+  identifier: string | null;
+  language: string;
+  title: string;
+  type: string;
 }
 
 // ============================================================================
@@ -55,11 +54,11 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
           const title = filename.split('/').pop()!.replace(/\.[^.]+$/, '');
 
           artifacts.push({
-            title: title || 'Untitled',
-            language: language,
-            type: isProgrammingLanguage(language) ? 'code' : 'document',
-            identifier: null,
             content: code.trim(),
+            identifier: null,
+            language: language,
+            title: title || 'Untitled',
+            type: isProgrammingLanguage(language) ? 'code' : 'document',
           });
         }
         // Check for json_block format (older artifact format)
@@ -78,11 +77,11 @@ function extractArtifactsFromMessage(message: ChatMessage): Artifact[] {
               const title = filename.split('/').pop().replace(/\.[^.]+$/, '');
 
               artifacts.push({
-                title: title || 'Untitled',
-                language: language,
-                type: isProgrammingLanguage(language) ? 'code' : 'document',
-                identifier: null,
                 content: code.trim(),
+                identifier: null,
+                language: language,
+                title: title || 'Untitled',
+                type: isProgrammingLanguage(language) ? 'code' : 'document',
               });
             }
           } catch (e) {
@@ -161,11 +160,11 @@ function extractArtifactsFromText(text: string): Artifact[] {
     }
 
     artifacts.push({
-      title: titleMatch ? titleMatch[1] : 'Untitled',
-      language: language,
-      type: artifactType,
-      identifier: identifierMatch ? identifierMatch[1] : null,
       content: content.trim(),
+      identifier: identifierMatch ? identifierMatch[1] : null,
+      language: language,
+      title: titleMatch ? titleMatch[1] : 'Untitled',
+      type: artifactType,
     });
   }
 
@@ -180,72 +179,72 @@ function extractArtifacts(text: string): Artifact[] {
 // Get file extension from language
 function getFileExtension(language: string): string {
   const languageToExt: Record<string, string> = {
-    javascript: '.js',
-    html: '.html',
-    css: '.css',
-    python: '.py',
-    java: '.java',
-    c: '.c',
-    cpp: '.cpp',
-    'c++': '.cpp',
-    ruby: '.rb',
-    php: '.php',
-    swift: '.swift',
-    go: '.go',
-    rust: '.rs',
-    typescript: '.ts',
-    tsx: '.tsx',
-    jsx: '.jsx',
-    shell: '.sh',
+    asm: '.asm',
+    assembly: '.asm',
     bash: '.sh',
-    sql: '.sql',
-    kotlin: '.kt',
-    scala: '.scala',
-    r: '.r',
-    matlab: '.m',
+    bib: '.bib',
+    bibtex: '.bib',
+    c: '.c',
+    'c#': '.cs',
+    'c++': '.cpp',
+    clojure: '.clj',
+    cpp: '.cpp',
+    csharp: '.cs',
+    css: '.css',
+    csv: '.csv',
+    dart: '.dart',
+    dockerfile: '.dockerfile',
+    elixir: '.ex',
+    erlang: '.erl',
+    'f#': '.fs',
+    fortran: '.f90',
+    fsharp: '.fs',
+    go: '.go',
+    gradle: '.gradle',
+    groovy: '.groovy',
+    haskell: '.hs',
+    html: '.html',
+    ini: '.ini',
+    java: '.java',
+    javascript: '.js',
     json: '.json',
+    jsx: '.jsx',
+    kotlin: '.kt',
+    latex: '.tex',
+    less: '.less',
+    lisp: '.lisp',
+    lua: '.lua',
+    makefile: '.mk',
+    markdown: '.md',
+    matlab: '.m',
+    md: '.md',
+    mermaid: '.mmd',
+    'objective-c': '.m',
+    ocaml: '.ml',
+    perl: '.pl',
+    php: '.php',
+    python: '.py',
+    r: '.r',
+    ruby: '.rb',
+    rust: '.rs',
+    sass: '.sass',
+    scala: '.scala',
+    scheme: '.scm',
+    scss: '.scss',
+    shell: '.sh',
+    sql: '.sql',
+    stylus: '.styl',
+    svg: '.svg',
+    swift: '.swift',
+    tex: '.tex',
+    text: '.txt',
+    toml: '.toml',
+    tsx: '.tsx',
+    txt: '.txt',
+    typescript: '.ts',
     xml: '.xml',
     yaml: '.yaml',
     yml: '.yml',
-    markdown: '.md',
-    md: '.md',
-    text: '.txt',
-    txt: '.txt',
-    latex: '.tex',
-    tex: '.tex',
-    bibtex: '.bib',
-    bib: '.bib',
-    mermaid: '.mmd',
-    svg: '.svg',
-    csv: '.csv',
-    toml: '.toml',
-    ini: '.ini',
-    perl: '.pl',
-    lua: '.lua',
-    dart: '.dart',
-    elixir: '.ex',
-    erlang: '.erl',
-    haskell: '.hs',
-    clojure: '.clj',
-    fsharp: '.fs',
-    'f#': '.fs',
-    'c#': '.cs',
-    csharp: '.cs',
-    'objective-c': '.m',
-    ocaml: '.ml',
-    scheme: '.scm',
-    lisp: '.lisp',
-    fortran: '.f90',
-    assembly: '.asm',
-    asm: '.asm',
-    scss: '.scss',
-    sass: '.sass',
-    less: '.less',
-    stylus: '.styl',
-    dockerfile: '.dockerfile',
-    makefile: '.mk',
-    gradle: '.gradle',
-    groovy: '.groovy',
   };
   return languageToExt[language.toLowerCase()] || '.txt';
 }
@@ -275,19 +274,34 @@ function convertArtifactFormat(
   // Keep code files and non-markdown files in original format
   if (isProgrammingLanguage(language) || originalExtension !== '.md') {
     return {
-      filename: `${baseFilename}${originalExtension}`,
-      content: content
+      content: content,
+      filename: `${baseFilename}${originalExtension}`
     };
   }
 
   // For markdown documents, convert based on selected format
   switch (format) {
+    case 'json': {
+      // Convert to JSON format
+      const jsonData = {
+        content: content,
+        format: 'markdown',
+        language: language,
+        title: baseFilename
+      };
+
+      return {
+        content: JSON.stringify(jsonData, null, 2),
+        filename: `${baseFilename}.json`
+      };
+    }
     case 'markdown':
+
     case 'original':
       // Keep as markdown
       return {
-        filename: `${baseFilename}.md`,
-        content: content
+        content: content,
+        filename: `${baseFilename}.md`
       };
 
     case 'text': {
@@ -325,31 +339,16 @@ function convertArtifactFormat(
       plainText = plainText.replace(/\n{3,}/g, '\n\n');
 
       return {
-        filename: `${baseFilename}.txt`,
-        content: plainText.trim()
-      };
-    }
-
-    case 'json': {
-      // Convert to JSON format
-      const jsonData = {
-        title: baseFilename,
-        language: language,
-        content: content,
-        format: 'markdown'
-      };
-
-      return {
-        filename: `${baseFilename}.json`,
-        content: JSON.stringify(jsonData, null, 2)
+        content: plainText.trim(),
+        filename: `${baseFilename}.txt`
       };
     }
 
     default:
       // Default to original format
       return {
-        filename: `${baseFilename}${originalExtension}`,
-        content: content
+        content: content,
+        filename: `${baseFilename}${originalExtension}`
       };
   }
 }
@@ -398,8 +397,8 @@ function extractArtifactFiles(
       usedFilenames.add(filename);
 
       artifactFiles.push({
-        filename: filename,
-        content: converted.content
+        content: converted.content,
+        filename: filename
       });
     }
   }
@@ -409,8 +408,8 @@ function extractArtifactFiles(
 
 export {
   convertArtifactFormat,
-  extractArtifacts,
   extractArtifactFiles,
+  extractArtifacts,
   extractArtifactsFromMessage,
   extractArtifactsFromText,
   getFileExtension,

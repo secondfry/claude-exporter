@@ -13,8 +13,8 @@
 // race each other across a storage round-trip; the merge is additive, so the
 // worst case is a lost update within that window, not corruption.
 
-import { storageGet, storageSet } from '../../platform';
-import type { ConversationSummary } from '../conversation/types';
+import type { ConversationSummary } from '$features/conversation/types';
+import { storageGet, storageSet } from '$platform';
 
 /** Maps a conversation UUID to the ISO timestamp of its last Export Record. */
 interface ExportRecords {
@@ -22,11 +22,11 @@ interface ExportRecords {
 }
 
 interface ModelSnapshot {
-  firstSeen: string;
-  firstSeenAt: string;
   current: string;
   currentAt: string;
-  history: Array<{ model: string; at: string }>;
+  firstSeen: string;
+  firstSeenAt: string;
+  history: Array<{ at: string; model: string; }>;
 }
 
 interface ModelSnapshots {
@@ -35,18 +35,18 @@ interface ModelSnapshots {
 
 interface ExportRecordBook {
   isStale(conv: ConversationSummary): boolean;
-  staleCount(convs: readonly ConversationSummary[]): number;
   readonly size: number;
+  staleCount(convs: readonly ConversationSummary[]): number;
 }
 
 interface DisplayModel {
-  model: string;
   bounced: boolean;
+  model: string;
   other: string;
-  otherLabel: 'Originally' | 'Currently' | '';
+  otherLabel: '' | 'Currently' | 'Originally';
 }
 
-type ModelPreference = 'original' | 'current';
+type ModelPreference = 'current' | 'original';
 
 interface ModelDisplayBook {
   display(conv: ConversationSummary): DisplayModel;
@@ -92,25 +92,28 @@ function getDisplayModel(
   conv: ConversationSummary,
   snapshots: ModelSnapshots,
   preference: ModelPreference,
-): { model: string; bounced: boolean; other: string } {
+): { bounced: boolean; model: string; other: string } {
   const snap = snapshots[conv.uuid];
   if (snap && snap.firstSeen) {
     const original = snap.firstSeen;
     const current = snap.current || snap.firstSeen;
     const bounced = !!snap.current && snap.current !== snap.firstSeen;
     return {
-      model: preference === 'current' ? current : original,
       bounced,
+      model: preference === 'current' ? current : original,
       other: preference === 'current' ? original : current,
     };
   }
-  return { model: conv.model || '', bounced: false, other: '' };
+  return { bounced: false, model: conv.model || '', other: '' };
 }
 
 function makeExportRecordBook(records: ExportRecords): ExportRecordBook {
   return {
     isStale(conv) {
       return isStale(conv, records);
+    },
+    get size() {
+      return Object.keys(records).length;
     },
     staleCount(convs) {
       let count = 0;
@@ -119,18 +122,15 @@ function makeExportRecordBook(records: ExportRecords): ExportRecordBook {
       }
       return count;
     },
-    get size() {
-      return Object.keys(records).length;
-    },
   };
 }
 
 function makeModelDisplayBook(snapshots: ModelSnapshots, preference: ModelPreference): ModelDisplayBook {
   return {
     display(conv) {
-      const { model, bounced, other } = getDisplayModel(conv, snapshots, preference);
+      const { bounced, model, other } = getDisplayModel(conv, snapshots, preference);
       const otherLabel: DisplayModel['otherLabel'] = !other ? '' : preference === 'current' ? 'Originally' : 'Currently';
-      return { model, bounced, other, otherLabel };
+      return { bounced, model, other, otherLabel };
     },
   };
 }
@@ -203,18 +203,18 @@ async function recordModelSnapshots(conversations: ConversationSummary[]): Promi
       const existing = snapshots[id];
       if (!existing) {
         snapshots[id] = {
-          firstSeen: model,
-          firstSeenAt: now,
           current: model,
           currentAt: now,
-          history: [{ model, at: now }],
+          firstSeen: model,
+          firstSeenAt: now,
+          history: [{ at: now, model }],
         };
         changed = true;
       } else if (existing.current !== model) {
         existing.current = model;
         existing.currentAt = now;
         existing.history = existing.history || [];
-        existing.history.push({ model, at: now });
+        existing.history.push({ at: now, model });
         changed = true;
       }
     }
@@ -226,13 +226,13 @@ async function recordModelSnapshots(conversations: ConversationSummary[]): Promi
 }
 
 export {
-  loadExportRecords,
-  emptyExportRecords,
-  recordExports,
-  markExported,
   clearExportRecords,
-  loadModelDisplay,
+  emptyExportRecords,
   emptyModelDisplay,
+  loadExportRecords,
+  loadModelDisplay,
+  markExported,
+  recordExports,
   recordModelSnapshots,
 };
-export type { ExportRecordBook, DisplayModel, ModelPreference, ModelDisplayBook };
+export type { DisplayModel, ExportRecordBook, ModelDisplayBook, ModelPreference };

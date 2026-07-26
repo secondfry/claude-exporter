@@ -4,8 +4,8 @@
 // pure string comparisons so they can be reasoned about without a database:
 // the conversation's `updated_at` and the request signature.
 
-import { CONVERSATION_QUERY } from '../conversation/api';
-import type { Conversation } from '../conversation/types';
+import { CONVERSATION_QUERY } from '$features/conversation/api';
+import type { Conversation } from '$features/conversation/types';
 
 const DB_NAME = 'claude-exporter-chat-cache';
 const STORE_NAME = 'conversations';
@@ -28,14 +28,14 @@ const DB_VERSION = 1;
 const REQUEST_SIGNATURE = `chat_conversations?${CONVERSATION_QUERY}`;
 
 interface CacheRecord {
-  uuid: string;
-  /** Verbatim `updated_at` from the response the record was built from. */
-  updatedAt: string;
+  /** The raw API response, unmodified. */
+  conversation: Conversation;
   requestSignature: string;
   /** When we stored it. Diagnostic only — never part of the hit decision. */
   storedAt: number;
-  /** The raw API response, unmodified. */
-  conversation: Conversation;
+  /** Verbatim `updated_at` from the response the record was built from. */
+  updatedAt: string;
+  uuid: string;
 }
 
 /**
@@ -56,22 +56,22 @@ function isFresh(record: CacheRecord | undefined, updatedAt: string | undefined)
 
 function toRecord(conversation: Conversation, storedAt: number): CacheRecord {
   return {
-    uuid: conversation.uuid,
-    updatedAt: conversation.updated_at,
+    conversation,
     requestSignature: REQUEST_SIGNATURE,
     storedAt,
-    conversation,
+    updatedAt: conversation.updated_at,
+    uuid: conversation.uuid,
   };
 }
 
 export {
   DB_NAME,
   DB_VERSION,
+  isFresh,
   META_STORE_NAME,
   REQUEST_SIGNATURE,
   SIGNATURE_KEY,
   STORE_NAME,
-  isFresh,
   toRecord,
 };
 export type { CacheRecord };

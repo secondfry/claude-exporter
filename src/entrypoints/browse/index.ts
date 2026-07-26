@@ -8,39 +8,39 @@
 // RENDERING, the progress modal, export orchestration, toasts and event
 // wiring — nothing else.
 
-import {
-  getExtensionUrl,
-  hasClaudeAccess,
-  requestClaudeAccess,
-  storageGet,
-  storageSet,
-} from '../../platform';
-import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
-import type { Project } from '../../features/conversation/api';
-import type { ConversationSummary } from '../../features/conversation/types';
-import { createConversationList } from '../../features/conversation-list';
-import type { SortField, StatusFilter } from '../../features/conversation-list';
-import { localCache } from '../../features/cache';
-import { exportConversations } from '../../features/export/pipeline';
+import { backupExtensionData, importBackup, showImportModeModal } from '$features/backup';
+import type { ImportMode } from '$features/backup';
+import { localCache } from '$features/cache';
+import { createConversationList } from '$features/conversation-list';
+import type { SortField, StatusFilter } from '$features/conversation-list';
+import { detectOrgId, fetchConversationList, fetchProjects } from '$features/conversation/api';
+import type { Project } from '$features/conversation/api';
+import type { ConversationSummary } from '$features/conversation/types';
+import { initErrorCapture } from '$features/diagnostics';
+import { exportConversations } from '$features/export/pipeline';
 import type {
   ArtifactFormat,
   ExportFormat,
   ExportOptions,
   ExportProgress,
   ExportTarget,
-} from '../../features/export/types';
+} from '$features/export/types';
+import { formatModelName, getModelBadgeClass, inferModel } from '$features/models';
 import {
-  recordModelSnapshots,
+  clearExportRecords,
   loadExportRecords,
   loadModelDisplay,
   markExported,
-  clearExportRecords,
-} from '../../features/tracking';
-import type { ExportRecordBook } from '../../features/tracking';
-import { formatModelName, getModelBadgeClass, inferModel } from '../../features/models';
-import { backupExtensionData, importBackup, showImportModeModal } from '../../features/backup';
-import type { ImportMode } from '../../features/backup';
-import { initErrorCapture } from '../../features/diagnostics';
+  recordModelSnapshots,
+} from '$features/tracking';
+import type { ExportRecordBook } from '$features/tracking';
+import {
+  getExtensionUrl,
+  hasClaudeAccess,
+  requestClaudeAccess,
+  storageGet,
+  storageSet,
+} from '$platform';
 
 // ---------------------------------------------------------------------------
 // DOM helpers
@@ -99,9 +99,9 @@ let orgId: string | null = null;
 // list.display) rather than keeping a second, independently-updated copy
 // that sorting/filtering and rendering could silently disagree on.
 const list = createConversationList();
-let dateFormat: 'mdy' | 'dmy' = 'mdy';
+let dateFormat: 'dmy' | 'mdy' = 'mdy';
 let timeFormat: '12h' | '24h' = '12h';
-let modelDisplay: 'original' | 'current' = 'original';
+let modelDisplay: 'current' | 'original' = 'original';
 
 /** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
 function asStatusFilter(value: string | undefined): StatusFilter {
@@ -142,9 +142,9 @@ function formatDate(dt: Date): string {
 
 function formatTime(dt: Date): string {
   if (timeFormat === '24h') {
-    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return dt.toLocaleTimeString([], { hour: '2-digit', hour12: false, minute: '2-digit' });
   }
-  return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  return dt.toLocaleTimeString([], { hour: '2-digit', hour12: true, minute: '2-digit' });
 }
 
 // ---------------------------------------------------------------------------
@@ -399,9 +399,9 @@ function displayConversations(): void {
       // network, so it must come from the same source the table rendered.
       const conv = list.all().find((candidate) => candidate.uuid === id);
       void exportSingle({
-        uuid: id,
         name: btn.dataset.name || id,
         updatedAt: conv?.updated_at,
+        uuid: id,
       });
     });
   });
@@ -505,22 +505,22 @@ function autoSelectNewUpdated(): void {
 
 function readExportOptions(): ExportOptions {
   return {
-    format: req<HTMLSelectElement>('exportFormat').value as ExportFormat,
-    includeChats: req<HTMLInputElement>('includeChats').checked,
-    includeThinking: req<HTMLInputElement>('includeThinking').checked,
-    includeMetadata: req<HTMLInputElement>('includeMetadata').checked,
-    includeArtifacts: req<HTMLInputElement>('includeArtifacts').checked,
+    artifactFormat: req<HTMLSelectElement>('artifactFormat').value,
     extractArtifacts: req<HTMLInputElement>('extractArtifacts').checked,
-    artifactFormat: req<HTMLSelectElement>('artifactFormat').value as ArtifactFormat,
     flattenArtifacts: req<HTMLInputElement>('flattenArtifacts').checked,
+    format: req<HTMLSelectElement>('exportFormat').value as ExportFormat,
+    includeArtifacts: req<HTMLInputElement>('includeArtifacts').checked,
+    includeChats: req<HTMLInputElement>('includeChats').checked,
+    includeMetadata: req<HTMLInputElement>('includeMetadata').checked,
+    includeThinking: req<HTMLInputElement>('includeThinking').checked,
   };
 }
 
 interface ProgressModal {
-  hide(): void;
-  update(progress: ExportProgress): void;
-  readonly signal: AbortSignal;
   dispose(): void;
+  hide(): void;
+  readonly signal: AbortSignal;
+  update(progress: ExportProgress): void;
 }
 
 /** Drives #progressModal and wires #cancelExport to an AbortController. */
@@ -551,6 +551,10 @@ function openProgressModal(initialText: string): ProgressModal {
 
   return {
     hide,
+    signal: controller.signal,
+    dispose() {
+      cancelButton.removeEventListener('click', onCancel);
+    },
     update(progress: ExportProgress) {
       if (progress.phase === 'zipping') {
         text.textContent = 'Creating ZIP file...';
@@ -561,10 +565,6 @@ function openProgressModal(initialText: string): ProgressModal {
       const percent = progress.total > 0 ? Math.round((done / progress.total) * 100) : 0;
       bar.style.width = `${percent}%`;
       stats.textContent = `${progress.completed} succeeded, ${progress.failed} failed out of ${progress.total}`;
-    },
-    signal: controller.signal,
-    dispose() {
-      cancelButton.removeEventListener('click', onCancel);
     },
   };
 }
@@ -628,23 +628,23 @@ async function exportAllFiltered(): Promise<void> {
     list.selectedCount() > 0 ? list.all().filter((conv) => list.selected().has(conv.uuid)) : list.view();
 
   const targets: ExportTarget[] = conversationsToExport.map((conv) => ({
-    uuid: conv.uuid,
     name: conv.name,
     updatedAt: conv.updated_at,
+    uuid: conv.uuid,
   }));
 
   const single = targets.length === 1;
   const modal = openProgressModal(
-    single ? `Exporting ${targets[0]!.name}...` : `Exporting ${targets.length} conversations...`
+    single ? `Exporting ${targets[0].name}...` : `Exporting ${targets.length} conversations...`
   );
 
   try {
     const result = await exportConversations(orgId, targets, options, {
-      onProgress: (progress) => modal.update(progress),
-      signal: modal.signal,
       // The browse page is extension-origin, the same as the background
       // worker, so it shares that IndexedDB and needs no relay.
       cache: localCache,
+      signal: modal.signal,
+      onProgress: (progress) => modal.update(progress),
     });
 
     modal.hide();
@@ -654,8 +654,8 @@ async function exportAllFiltered(): Promise<void> {
     if (single) {
       showToast(
         result.artifactCount > 0
-          ? `Exported: ${targets[0]!.name} with ${result.artifactCount} artifact(s)`
-          : `Exported: ${targets[0]!.name}`
+          ? `Exported: ${targets[0].name} with ${result.artifactCount} artifact(s)`
+          : `Exported: ${targets[0].name}`
       );
     } else if (failed > 0) {
       showToast(`Exported ${completed} of ${targets.length} conversations (${failed} failed).`);
@@ -825,7 +825,7 @@ function setupEventListeners(): void {
   // Backup / Restore Database submenu — shared logic lives in features/backup
   req('backupData').addEventListener('click', async () => {
     settingsDropdown.classList.remove('open');
-    const { success, message } = await backupExtensionData();
+    const { message, success } = await backupExtensionData();
     showToast(message, !success);
   });
 
@@ -849,7 +849,7 @@ function setupEventListeners(): void {
     const mode = pendingImportMode;
     pendingImportMode = null; // consume; never reuse a stale mode
     if (!file || !mode) return;
-    const { success, message } = await importBackup(file, mode);
+    const { message, success } = await importBackup(file, mode);
     showToast(message, !success);
   });
 

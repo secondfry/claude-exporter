@@ -7,18 +7,18 @@
 
 import JSZip from 'jszip';
 
-import { fetchConversation } from '../conversation/api';
-import type { Conversation } from '../conversation/types';
-import { extractArtifactFiles } from '../artifacts';
-import { inferModel } from '../models';
-import { convertToMarkdown, convertToText } from '../rendering';
+import { extractArtifactFiles } from '$features/artifacts';
+import { fetchConversation } from '$features/conversation/api';
+import type { Conversation } from '$features/conversation/types';
+import { inferModel } from '$features/models';
+import { convertToMarkdown, convertToText } from '$features/rendering';
 // Direct import, deliberately not an injected hook: an optional hook is one a
 // caller will eventually omit, and this codebase has already had the two
 // export callers diverge once over this exact call (CLAUDE.md). The content
 // script may call this directly — chrome.storage.local is extension-scoped,
 // not origin-partitioned, unlike the Chat Cache, which needs the background
 // relay (ADR-0003).
-import { recordExports } from '../tracking';
+import { recordExports } from '$features/tracking';
 
 import {
   bulkZipFilename,
@@ -43,9 +43,9 @@ const BATCH_SIZE = 3;
 const INTER_BATCH_DELAY_MS = 200;
 
 const ZIP_OPTIONS = {
-  type: 'blob',
   compression: 'DEFLATE',
   compressionOptions: { level: 6 },
+  type: 'blob',
 } as const;
 
 function delay(ms: number): Promise<void> {
@@ -116,13 +116,13 @@ function buildEntries(
 
   if (options.flattenArtifacts && !options.extractArtifacts) {
     if (chatContent !== null) {
-      entries.push({ path: `Chats/${chatFilename}`, content: chatContent, isChat: true });
+      entries.push({ content: chatContent, isChat: true, path: `Chats/${chatFilename}` });
     }
     for (const artifact of artifactFiles) {
       entries.push({
-        path: `Artifacts/${safeName}_${artifact.filename}`,
         content: artifact.content,
         isChat: false,
+        path: `Artifacts/${safeName}_${artifact.filename}`,
       });
     }
     return entries;
@@ -131,23 +131,23 @@ function buildEntries(
   if (options.extractArtifacts) {
     const base = nest ? `${safeName}/` : '';
     if (chatContent !== null) {
-      entries.push({ path: `${base}${chatFilename}`, content: chatContent, isChat: true });
+      entries.push({ content: chatContent, isChat: true, path: `${base}${chatFilename}` });
     }
     // Artifacts only get their own subfolder when there's a transcript to sit
     // beside; otherwise they'd be alone inside a pointless directory.
     const artifactBase = chatContent !== null ? `${base}artifacts/` : base;
     for (const artifact of artifactFiles) {
       entries.push({
-        path: `${artifactBase}${artifact.filename}`,
         content: artifact.content,
         isChat: false,
+        path: `${artifactBase}${artifact.filename}`,
       });
     }
     return entries;
   }
 
   if (chatContent !== null) {
-    entries.push({ path: chatFilename, content: chatContent, isChat: true });
+    entries.push({ content: chatContent, isChat: true, path: chatFilename });
   }
   return entries;
 }
@@ -175,11 +175,11 @@ async function loadConversation(
   orgId: string,
   target: ExportTarget,
   hooks: ExportHooks | undefined
-): Promise<{ data: Conversation; cached: boolean; quota: boolean }> {
+): Promise<{ cached: boolean; data: Conversation; quota: boolean }> {
   const cache = hooks?.cache;
 
   const hit = cache ? await cache.read(target.uuid, target.updatedAt) : null;
-  if (hit) return { data: hit, cached: true, quota: false };
+  if (hit) return { cached: true, data: hit, quota: false };
 
   const data = await fetchConversation(orgId, target.uuid, hooks?.signal);
   if (!data || !Array.isArray(data.chat_messages)) {
@@ -187,24 +187,24 @@ async function loadConversation(
   }
 
   const status = cache ? await cache.write(data) : 'unavailable';
-  return { data, cached: false, quota: status === 'quota' };
+  return { cached: false, data, quota: status === 'quota' };
 }
 
 interface FetchOutcome {
-  entries: ExportEntry[];
-  failedNames: string[];
   /** Conversations answered from the cache, so never requested over the network. */
   cacheHits: number;
   cacheQuotaExceeded: boolean;
+  entries: ExportEntry[];
+  failedNames: string[];
+  firstError: unknown;
+  /** Display name actually used per uuid, taken from the fetched conversation. */
+  resolvedNames: Map<string, string>;
   /**
    * Conversations that contributed at least one file to `entries`. A fetch that
    * succeeded but produced nothing (chats off, no artifacts) is NOT in here:
    * an Export Record asserts the user got a file (CONTEXT.md).
    */
   succeededIds: string[];
-  /** Display name actually used per uuid, taken from the fetched conversation. */
-  resolvedNames: Map<string, string>;
-  firstError: unknown;
 }
 
 async function fetchAll(
@@ -232,7 +232,7 @@ async function fetchAll(
     await Promise.all(
       batch.map(async (target) => {
         try {
-          const { data, cached, quota } = await loadConversation(orgId, target, hooks);
+          const { cached, data, quota } = await loadConversation(orgId, target, hooks);
           if (cached) cacheHits++;
           else hitNetwork = true;
           if (quota) cacheQuotaExceeded = true;
@@ -249,11 +249,11 @@ async function fetchAll(
     );
 
     hooks?.onProgress?.({
-      phase: 'fetching',
       completed,
-      total,
       failed: failedNames.length,
       fromCache: cacheHits,
+      phase: 'fetching',
+      total,
     });
 
     // The delay exists to keep claude.ai from rate-limiting us. A batch served
@@ -277,24 +277,24 @@ async function fetchAll(
   }
 
   return {
-    entries,
-    failedNames,
-    succeededIds,
-    resolvedNames,
-    firstError,
     cacheHits,
     cacheQuotaExceeded,
+    entries,
+    failedNames,
+    firstError,
+    resolvedNames,
+    succeededIds,
   };
 }
 
 interface FinishArgs {
-  blob: Blob;
-  filename: string;
-  succeededIds: string[];
-  failedNames: string[];
   artifactCount: number;
+  blob: Blob;
   cacheHits: number;
   cacheQuotaExceeded: boolean;
+  failedNames: string[];
+  filename: string;
+  succeededIds: string[];
 }
 
 /**
@@ -309,13 +309,13 @@ interface FinishArgs {
  * `recordsWritten` instead of rejecting.
  */
 async function finish({
-  blob,
-  filename,
-  succeededIds,
-  failedNames,
   artifactCount,
+  blob,
   cacheHits,
   cacheQuotaExceeded,
+  failedNames,
+  filename,
+  succeededIds,
 }: FinishArgs): Promise<ExportResult> {
   downloadBlob(blob, filename);
 
@@ -330,12 +330,12 @@ async function finish({
   }
 
   return {
+    artifactCount,
+    cacheQuotaExceeded,
     exportedIds: succeededIds,
     failedNames,
-    artifactCount,
     filename,
     fromCache: cacheHits,
-    cacheQuotaExceeded,
     recordsWritten,
   };
 }
@@ -358,13 +358,13 @@ async function exportConversations(
 
   const single = targets.length === 1;
   const {
-    entries,
-    failedNames,
-    succeededIds,
-    resolvedNames,
-    firstError,
     cacheHits,
     cacheQuotaExceeded,
+    entries,
+    failedNames,
+    firstError,
+    resolvedNames,
+    succeededIds,
   } = await fetchAll(
     orgId,
     targets,
@@ -386,16 +386,16 @@ async function exportConversations(
   const artifactCount = entries.filter((entry) => !entry.isChat).length;
 
   if (single && entries.length === 1) {
-    const entry = entries[0]!;
+    const entry = entries[0];
     const filename = entry.path.slice(entry.path.lastIndexOf('/') + 1);
     return finish({
-      blob: new Blob([entry.content], { type: mimeForFilename(filename) }),
-      filename,
-      succeededIds,
-      failedNames,
       artifactCount,
+      blob: new Blob([entry.content], { type: mimeForFilename(filename) }),
       cacheHits,
       cacheQuotaExceeded,
+      failedNames,
+      filename,
+      succeededIds,
     });
   }
 
@@ -406,10 +406,10 @@ async function exportConversations(
 
   const blob = await zip.generateAsync(ZIP_OPTIONS, (metadata) => {
     hooks?.onProgress?.({
-      phase: 'zipping',
       completed: Math.round(metadata.percent),
-      total: 100,
       failed: failedNames.length,
+      phase: 'zipping',
+      total: 100,
     });
   });
 
@@ -418,19 +418,19 @@ async function exportConversations(
   // failure toast because the cancel button already showed its own.
   throwIfAborted(hooks?.signal);
 
-  const first = targets[0]!;
+  const first = targets[0];
   const filename = single
     ? `${sanitizeFilename(resolvedNames.get(first.uuid) || first.name || first.uuid)}.zip`
     : bulkZipFilename(options);
 
   return finish({
-    blob,
-    filename,
-    succeededIds,
-    failedNames,
     artifactCount,
+    blob,
     cacheHits,
     cacheQuotaExceeded,
+    failedNames,
+    filename,
+    succeededIds,
   });
 }
 

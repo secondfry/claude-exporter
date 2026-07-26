@@ -12,17 +12,20 @@ import { beforeEach, vi } from 'vitest';
 type StorageRecord = Record<string, unknown>;
 
 interface StubArea {
-  get(keys: string | string[] | null): Promise<StorageRecord>;
-  set(items: StorageRecord): Promise<void>;
-  remove(keys: string | string[]): Promise<void>;
-  clear(): Promise<void>;
   _data: StorageRecord;
+  clear(): Promise<void>;
+  get(keys: string | string[] | null): Promise<StorageRecord>;
+  remove(keys: string | string[]): Promise<void>;
+  set(items: StorageRecord): Promise<void>;
 }
 
 function createArea(): StubArea {
   const data: StorageRecord = {};
   return {
     _data: data,
+    async clear() {
+      for (const key of Object.keys(data)) delete data[key];
+    },
     async get(keys) {
       // Deep-copy on the way out: real chrome.storage structured-clones
       // across the extension boundary, so a caller mutating what it read
@@ -39,42 +42,39 @@ function createArea(): StubArea {
       }
       return out;
     },
+    async remove(keys) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete data[key];
+    },
     async set(items) {
       // Deep-copy on the way in too, for the same reason: the caller's
       // object must not remain live inside the stub after the call returns.
       Object.assign(data, structuredClone(items));
-    },
-    async remove(keys) {
-      for (const key of Array.isArray(keys) ? keys : [keys]) delete data[key];
-    },
-    async clear() {
-      for (const key of Object.keys(data)) delete data[key];
     },
   };
 }
 
 function createChromeStub() {
   return {
-    storage: { local: createArea(), sync: createArea() },
+    permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },
     runtime: {
+      onInstalled: { addListener: vi.fn() },
+      onMessage: { addListener: vi.fn() },
+      openOptionsPage: vi.fn(),
+      sendMessage: vi.fn(),
       getManifest: () => ({ name: 'Claude Exporter', version: '0.0.0-test' }),
       getURL: (path: string) => `chrome-extension://test/${path}`,
-      sendMessage: vi.fn(),
-      onMessage: { addListener: vi.fn() },
-      onInstalled: { addListener: vi.fn() },
-      openOptionsPage: vi.fn(),
     },
-    tabs: { query: vi.fn(), sendMessage: vi.fn(), create: vi.fn() },
     scripting: { executeScript: vi.fn() },
-    permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },
+    storage: { local: createArea(), sync: createArea() },
+    tabs: { create: vi.fn(), query: vi.fn(), sendMessage: vi.fn() },
   };
 }
 
 const chromeStub = createChromeStub();
 
 Object.defineProperty(globalThis, 'chrome', {
-  value: chromeStub,
   configurable: true,
+  value: chromeStub,
   writable: true,
 });
 

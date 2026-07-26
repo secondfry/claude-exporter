@@ -1,14 +1,14 @@
-import { backupExtensionData, showImportModeModal, importBackup } from '../../features/backup';
-import type { ImportMode } from '../../features/backup';
-import { cacheStats, clearCache } from '../../features/cache';
-import { generateDiagnostics, initErrorCapture } from '../../features/diagnostics';
-import { fetchConversationList } from '../../features/conversation/api';
-import { storageGet, storageSet, getManifestVersion, hasClaudeAccess, requestClaudeAccess } from '../../platform';
+import { backupExtensionData, importBackup, showImportModeModal } from '$features/backup';
+import type { ImportMode } from '$features/backup';
+import { cacheStats, clearCache } from '$features/cache';
+import { fetchConversationList } from '$features/conversation/api';
+import { generateDiagnostics, initErrorCapture } from '$features/diagnostics';
+import { getManifestVersion, hasClaudeAccess, requestClaudeAccess, storageGet, storageSet } from '$platform';
 
 // Capture unhandled errors for diagnostics (sanitized, stored in chrome.storage.local)
 initErrorCapture('options');
 
-function showStatus(elementId: string, message: string, type: 'success' | 'error'): void {
+function showStatus(elementId: string, message: string, type: 'error' | 'success'): void {
   const statusEl = document.getElementById(elementId);
   if (!statusEl) return;
   statusEl.textContent = message;
@@ -95,7 +95,7 @@ document.getElementById('testBtn')?.addEventListener('click', async () => {
 
 // Backup all extension data to a file (shared logic lives in features/backup)
 document.getElementById('backupBtn')?.addEventListener('click', async () => {
-  const { success, message } = await backupExtensionData();
+  const { message, success } = await backupExtensionData();
   showStatus('backupStatus', message, success ? 'success' : 'error');
 });
 
@@ -119,7 +119,7 @@ document.getElementById('restoreFile')?.addEventListener('change', async (event)
   const mode = pendingImportMode;
   pendingImportMode = null; // consume; never reuse a stale mode
   if (!file || !mode) return;
-  const { success, message } = await importBackup(file, mode);
+  const { message, success } = await importBackup(file, mode);
   showStatus('backupStatus', message, success ? 'success' : 'error');
 });
 
@@ -178,7 +178,7 @@ document.getElementById('emailDevLink')?.addEventListener('click', (e) => {
 
 document.getElementById('generateDiagnosticsLink')?.addEventListener('click', async (e) => {
   e.preventDefault();
-  const { success, message } = await generateDiagnostics();
+  const { message, success } = await generateDiagnostics();
   showStatus('contactStatus', message, success ? 'success' : 'error');
 });
 

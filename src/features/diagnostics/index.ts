@@ -6,7 +6,7 @@
 // project IDs that may appear in fetch URLs or stack traces) is replaced with
 // "<id>" so we never persist identifiers.
 
-import { getManifestName, getManifestVersion, storageGet, storageSet } from '../../platform';
+import { getManifestName, getManifestVersion, storageGet, storageSet } from '$platform';
 
 const CE_UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const CE_ERROR_LOG_MAX = 50;
@@ -16,19 +16,19 @@ function sanitizeForDiagnostics(value: string): string {
 }
 
 interface ErrorLogEntry {
-  ts: string;
-  level: 'error' | 'unhandledrejection';
+  col?: number | null;
   context: string | undefined;
+  level: 'error' | 'unhandledrejection';
+  line?: number | null;
   msg: string;
   source?: string | null;
-  line?: number | null;
-  col?: number | null;
   stack?: string | null;
+  ts: string;
 }
 
 interface DiagnosticsOutcome {
-  success: boolean;
   message: string;
+  success: boolean;
 }
 
 function isErrorLogEntry(value: unknown): value is ErrorLogEntry {
@@ -80,14 +80,14 @@ function initErrorCapture(context?: string): void {
 
   globalThis.addEventListener('error', (event: ErrorEvent) => {
     push({
-      ts: new Date().toISOString(),
-      level: 'error',
+      col: event.colno || null,
       context,
+      level: 'error',
+      line: event.lineno || null,
       msg: sanitizeForDiagnostics(String(event.message || '')),
       source: sanitizeOptional(event.filename),
-      line: event.lineno || null,
-      col: event.colno || null,
       stack: sanitizeOptional(event.error instanceof Error ? event.error.stack : null),
+      ts: new Date().toISOString(),
     });
   });
 
@@ -97,22 +97,22 @@ function initErrorCapture(context?: string): void {
       ? reason.message
       : (reason !== undefined ? String(reason) : '(no reason)');
     push({
-      ts: new Date().toISOString(),
-      level: 'unhandledrejection',
       context,
+      level: 'unhandledrejection',
       msg: sanitizeForDiagnostics(msg),
       stack: sanitizeOptional(reason instanceof Error ? reason.stack : null),
+      ts: new Date().toISOString(),
     });
   });
 }
 
 interface DiagnosticsStorage extends Record<string, unknown> {
-  errorLog?: unknown;
-  modelSnapshots?: unknown;
-  exportTimestamps?: unknown;
   dateFormat?: unknown;
-  timeFormat?: unknown;
+  errorLog?: unknown;
+  exportTimestamps?: unknown;
   modelDisplay?: unknown;
+  modelSnapshots?: unknown;
+  timeFormat?: unknown;
 }
 
 // Build a sanitized diagnostics bundle and trigger a download.
@@ -130,26 +130,26 @@ async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
         diagnosticsVersion: 1,
         generatedAt: new Date().toISOString(),
       },
+      counts: {
+        errors: errorLog.length,
+        exportTimestamps: countEntries(local.exportTimestamps),
+        modelSnapshots: countEntries(local.modelSnapshots),
+      },
+      environment: {
+        language: (typeof navigator !== 'undefined' && navigator.language) || null,
+        userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || null,
+      },
+      errors: errorLog,
       extension: {
         name: getManifestName(),
         version: getManifestVersion(),
       },
-      environment: {
-        userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || null,
-        language: (typeof navigator !== 'undefined' && navigator.language) || null,
-      },
       preferences: {
         dateFormat: local.dateFormat || 'mdy',
-        timeFormat: local.timeFormat || '12h',
         modelDisplay: local.modelDisplay === 'current' ? 'current' : 'original',
         orgIdConfigured: Boolean(sync.organizationId),
+        timeFormat: local.timeFormat || '12h',
       },
-      counts: {
-        modelSnapshots: countEntries(local.modelSnapshots),
-        exportTimestamps: countEntries(local.exportTimestamps),
-        errors: errorLog.length,
-      },
-      errors: errorLog,
     };
 
     const now = new Date();
@@ -168,13 +168,13 @@ async function generateDiagnostics(): Promise<DiagnosticsOutcome> {
     URL.revokeObjectURL(url);
 
     return {
-      success: true,
       message: `Diagnostics downloaded — ${errorLog.length} error(s) captured, all IDs redacted.`,
+      success: true,
     };
   } catch (error) {
     return {
-      success: false,
       message: `Diagnostics failed: ${error instanceof Error ? error.message : String(error)}`,
+      success: false,
     };
   }
 }

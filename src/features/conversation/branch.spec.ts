@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import { getCurrentBranch } from './branch';
 import type { Conversation } from './types';
 
@@ -19,12 +20,12 @@ describe('getCurrentBranch', () => {
 
   it('walks from leaf back to root in chronological order', () => {
     const data = {
-      current_leaf_message_uuid: 'm3',
       chat_messages: [
-        { uuid: 'm1', parent_message_uuid: 'root', text: 'first' },
-        { uuid: 'm2', parent_message_uuid: 'm1', text: 'second' },
-        { uuid: 'm3', parent_message_uuid: 'm2', text: 'third' },
+        { parent_message_uuid: 'root', text: 'first', uuid: 'm1' },
+        { parent_message_uuid: 'm1', text: 'second', uuid: 'm2' },
+        { parent_message_uuid: 'm2', text: 'third', uuid: 'm3' },
       ],
+      current_leaf_message_uuid: 'm3',
     } as unknown as Conversation;
     const branch = getCurrentBranch(data);
     expect(branch.map((m) => m.uuid)).toEqual(['m1', 'm2', 'm3']);
@@ -33,13 +34,13 @@ describe('getCurrentBranch', () => {
   it('only includes messages on the current branch (ignores siblings)', () => {
     // m1 → m2a → m3 (current leaf), m1 → m2b is a sibling branch and should be excluded
     const data = {
-      current_leaf_message_uuid: 'm3',
       chat_messages: [
-        { uuid: 'm1', parent_message_uuid: 'root', text: 'first' },
-        { uuid: 'm2a', parent_message_uuid: 'm1', text: 'kept' },
-        { uuid: 'm2b', parent_message_uuid: 'm1', text: 'sibling' },
-        { uuid: 'm3', parent_message_uuid: 'm2a', text: 'leaf' },
+        { parent_message_uuid: 'root', text: 'first', uuid: 'm1' },
+        { parent_message_uuid: 'm1', text: 'kept', uuid: 'm2a' },
+        { parent_message_uuid: 'm1', text: 'sibling', uuid: 'm2b' },
+        { parent_message_uuid: 'm2a', text: 'leaf', uuid: 'm3' },
       ],
+      current_leaf_message_uuid: 'm3',
     } as unknown as Conversation;
     const branch = getCurrentBranch(data);
     expect(branch.map((m) => m.uuid)).toEqual(['m1', 'm2a', 'm3']);

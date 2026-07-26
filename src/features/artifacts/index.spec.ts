@@ -1,13 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
+import type { ChatMessage, Conversation } from '$features/conversation/types';
 
 import {
-  extractArtifactsFromMessage,
   extractArtifactFiles,
+  extractArtifactsFromMessage,
   getFileExtension,
   isProgrammingLanguage,
 } from './index';
-
-import type { ChatMessage, Conversation } from '../conversation/types';
 
 // Regression coverage for the bug fixed in v1.9.1: bash/web_search/repl
 // tool_use entries used to slip through as fake artifacts. Now gated on
@@ -17,14 +17,14 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'bash',
           display_content: {
-            type: 'code_block',
             code: 'ls -la',
-            language: 'bash',
             filename: 'cmd.sh',
+            language: 'bash',
+            type: 'code_block',
           },
+          name: 'bash',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -35,13 +35,13 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'web_search',
           display_content: {
-            type: 'code_block',
             code: 'results...',
             language: 'json',
+            type: 'code_block',
           },
+          name: 'web_search',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -52,14 +52,14 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'artifacts',
           display_content: {
-            type: 'code_block',
             code: 'def hello():\n    pass',
-            language: 'python',
             filename: 'hello.py',
+            language: 'python',
+            type: 'code_block',
           },
+          name: 'artifacts',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -74,16 +74,16 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'artifacts',
           display_content: {
-            type: 'json_block',
             json_block: JSON.stringify({
+              code: 'console.log("hi");',
               filename: 'app.js',
               language: 'javascript',
-              code: 'console.log("hi");',
             }),
+            type: 'json_block',
           },
+          name: 'artifacts',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -96,14 +96,14 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'artifacts',
           display_content: {
-            type: 'json_block',
             json_block: JSON.stringify({
               code: 'echo hi',
             }),
+            type: 'json_block',
           },
+          name: 'artifacts',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -119,20 +119,20 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'create_file',
-          input: {
-            path: '/mnt/user-data/outputs/hello.md',
-            file_text: '# Hello, world!\n',
-          },
           display_content: {
-            type: 'json_block',
             json_block: JSON.stringify({
-              language: 'markdown',
               code: '# Hello, world!\n',
               filename: '/mnt/user-data/outputs/hello.md',
+              language: 'markdown',
             }),
+            type: 'json_block',
           },
+          input: {
+            file_text: '# Hello, world!\n',
+            path: '/mnt/user-data/outputs/hello.md',
+          },
+          name: 'create_file',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -147,16 +147,16 @@ describe('extractArtifactsFromMessage — tool name filter', () => {
     const message = {
       content: [
         {
-          type: 'tool_use',
-          name: 'view',
           display_content: {
-            type: 'json_block',
             json_block: JSON.stringify({
-              language: 'text',
               code: 'directory listing here',
               filename: '/mnt/skills/public',
+              language: 'text',
             }),
+            type: 'json_block',
           },
+          name: 'view',
+          type: 'tool_use',
         },
       ],
     } as unknown as ChatMessage;
@@ -168,49 +168,49 @@ describe('extractArtifactFiles — end-to-end', () => {
   function makeConversationWithMessages(messages: ChatMessage[]): Conversation {
     const last = messages[messages.length - 1];
     return {
-      uuid: 'conv-1',
-      name: 'Test',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-      current_leaf_message_uuid: last.uuid,
       chat_messages: messages,
+      created_at: '2024-01-01T00:00:00Z',
+      current_leaf_message_uuid: last.uuid,
+      name: 'Test',
+      updated_at: '2024-01-01T00:00:00Z',
+      uuid: 'conv-1',
     };
   }
 
   it('returns artifact files only from real artifact tool calls', () => {
     const data = makeConversationWithMessages([
       {
-        uuid: 'm1',
-        sender: 'human',
-        content: [{ type: 'text', text: 'make me something' }],
+        content: [{ text: 'make me something', type: 'text' }],
         parent_message_uuid: '00000000-0000-0000-0000-000000000000',
+        sender: 'human',
+        uuid: 'm1',
       },
       {
-        uuid: 'm2',
-        sender: 'assistant',
         content: [
           {
-            type: 'tool_use',
-            name: 'artifacts',
             display_content: {
-              type: 'code_block',
               code: '<h1>hi</h1>',
-              language: 'html',
               filename: 'page.html',
+              language: 'html',
+              type: 'code_block',
             },
+            name: 'artifacts',
+            type: 'tool_use',
           },
           {
-            type: 'tool_use',
-            name: 'bash',
             display_content: {
-              type: 'code_block',
               code: 'ls',
-              language: 'bash',
               filename: 'noise.sh',
+              language: 'bash',
+              type: 'code_block',
             },
+            name: 'bash',
+            type: 'tool_use',
           },
         ],
         parent_message_uuid: 'm1',
+        sender: 'assistant',
+        uuid: 'm2',
       },
     ]);
     const files = extractArtifactFiles(data);
@@ -221,31 +221,31 @@ describe('extractArtifactFiles — end-to-end', () => {
   it('deduplicates duplicate filenames with a counter suffix', () => {
     const data = makeConversationWithMessages([
       {
-        uuid: 'm1',
-        sender: 'assistant',
         content: [
           {
-            type: 'tool_use',
-            name: 'artifacts',
             display_content: {
-              type: 'code_block',
               code: 'a',
-              language: 'javascript',
               filename: 'app.js',
+              language: 'javascript',
+              type: 'code_block',
             },
+            name: 'artifacts',
+            type: 'tool_use',
           },
           {
-            type: 'tool_use',
-            name: 'artifacts',
             display_content: {
-              type: 'code_block',
               code: 'b',
-              language: 'javascript',
               filename: 'app.js',
+              language: 'javascript',
+              type: 'code_block',
             },
+            name: 'artifacts',
+            type: 'tool_use',
           },
         ],
         parent_message_uuid: '00000000-0000-0000-0000-000000000000',
+        sender: 'assistant',
+        uuid: 'm1',
       },
     ]);
     const files = extractArtifactFiles(data);

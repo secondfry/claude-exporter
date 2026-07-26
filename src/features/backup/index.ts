@@ -2,13 +2,13 @@
 // Records, for moving between machines. Never carries the Chat Cache — that
 // lives in IndexedDB, which this deliberately does not touch.
 
-import { getManifestVersion, storageGet, storageSet } from '../../platform';
+import { getManifestVersion, storageGet, storageSet } from '$platform';
 
 interface BackupMeta {
   app: 'claude-exporter';
   backupVersion: number;
-  extensionVersion: string;
   createdAt: string;
+  extensionVersion: string;
 }
 
 interface BackupFile {
@@ -19,8 +19,8 @@ interface BackupFile {
 
 /** What the caller shows the user; each surface renders it its own way. */
 interface BackupOutcome {
-  success: boolean;
   message: string;
+  success: boolean;
 }
 
 type ImportMode = 'merge' | 'replace';
@@ -77,8 +77,8 @@ async function backupExtensionData(): Promise<BackupOutcome> {
       _meta: {
         app: 'claude-exporter',
         backupVersion: 1,
-        extensionVersion: getManifestVersion(),
         createdAt: new Date().toISOString(),
+        extensionVersion: getManifestVersion(),
       },
       local: local ?? {},
       sync: sync ?? {},
@@ -87,13 +87,13 @@ async function backupExtensionData(): Promise<BackupOutcome> {
     const snapCount = countEntries(backup.local.modelSnapshots);
     const exportCount = countEntries(backup.local.exportTimestamps);
     return {
-      success: true,
       message: `Backup exported — ${snapCount} model snapshot(s), ${exportCount} export record(s).`,
+      success: true,
     };
   } catch (error) {
     return {
-      success: false,
       message: `Backup failed: ${error instanceof Error ? error.message : String(error)}`,
+      success: false,
     };
   }
 }
@@ -258,13 +258,13 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    return { success: false, message: 'Import failed: the file is not valid JSON.' };
+    return { message: 'Import failed: the file is not valid JSON.', success: false };
   }
 
   if (!isBackupFile(parsed)) {
     return {
-      success: false,
       message: 'Import failed: this does not look like a Claude Exporter backup file.',
+      success: false,
     };
   }
 
@@ -278,8 +278,8 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
       await storageSet('local', parsed.local);
       await storageSet('sync', syncData);
       return {
-        success: true,
         message: `Import complete (replace) — ${snapCount} model snapshot(s), ${exportCount} export record(s) restored. ${tail}`,
+        success: true,
       };
     }
 
@@ -288,13 +288,13 @@ async function importBackup(file: File, mode: ImportMode): Promise<BackupOutcome
     await storageSet('local', mergeStorageData(currentLocal ?? {}, parsed.local));
     await storageSet('sync', mergeStorageData(currentSync ?? {}, syncData));
     return {
-      success: true,
       message: `Import complete (merge) — added missing entries from backup, kept your current values on overlap. ${tail}`,
+      success: true,
     };
   } catch (error) {
     return {
-      success: false,
       message: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+      success: false,
     };
   }
 }

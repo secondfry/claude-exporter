@@ -13,16 +13,16 @@ const CONVERSATION_QUERY = 'tree=True&rendering_mode=messages&render_all_tools=t
 
 /** A project as returned by the organizations/{orgId}/projects endpoint. */
 interface Project {
-  uuid?: string;
   id?: string;
   name?: string;
   title?: string;
+  uuid?: string;
   [key: string]: unknown;
 }
 
 interface Organization {
-  uuid: string;
   capabilities?: string[];
+  uuid: string;
   [key: string]: unknown;
 }
 
@@ -71,5 +71,5 @@ async function detectOrgId(signal?: AbortSignal): Promise<string> {
   return chatOrg ? chatOrg.uuid : orgs[0].uuid;
 }
 
-export { fetchConversation, fetchConversationList, fetchProjects, detectOrgId, CONVERSATION_QUERY };
+export { CONVERSATION_QUERY, detectOrgId, fetchConversation, fetchConversationList, fetchProjects };
 export type { Project };

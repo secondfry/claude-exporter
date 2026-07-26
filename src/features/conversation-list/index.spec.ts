@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
+
+import type { ConversationSummary } from '$features/conversation/types';
+import type { ExportRecordBook } from '$features/tracking';
+
 import { createConversationList, getProjectName } from './index';
 import type { ConversationList } from './index';
-import type { ConversationSummary } from '../conversation/types';
-import type { ExportRecordBook } from '../tracking';
 
 function conv(overrides: Partial<ConversationSummary> & { uuid: string }): ConversationSummary {
   return {
-    name: 'Untitled',
     created_at: '2024-01-01T00:00:00.000Z',
+    name: 'Untitled',
     updated_at: '2024-01-01T00:00:00.000Z',
     ...overrides,
   };
@@ -16,9 +18,9 @@ function conv(overrides: Partial<ConversationSummary> & { uuid: string }): Conve
 function staleBook(staleUuids: readonly string[]): ExportRecordBook {
   const set = new Set(staleUuids);
   return {
+    size: 0,
     isStale: (c) => set.has(c.uuid),
     staleCount: (convs) => convs.filter((c) => set.has(c.uuid)).length,
-    size: 0,
   };
 }
 
@@ -26,9 +28,9 @@ describe('getProjectName', () => {
   const projects = { p1: 'Alpha' };
 
   it('falls back through project_uuid, project_id, projectUuid in order', () => {
-    expect(getProjectName(conv({ uuid: 'a', project_uuid: 'p1' }), projects)).toBe('Alpha');
-    expect(getProjectName(conv({ uuid: 'b', project_id: 'p1' }), projects)).toBe('Alpha');
-    expect(getProjectName(conv({ uuid: 'c', projectUuid: 'p1' }), projects)).toBe('Alpha');
+    expect(getProjectName(conv({ project_uuid: 'p1', uuid: 'a' }), projects)).toBe('Alpha');
+    expect(getProjectName(conv({ project_id: 'p1', uuid: 'b' }), projects)).toBe('Alpha');
+    expect(getProjectName(conv({ projectUuid: 'p1', uuid: 'c' }), projects)).toBe('Alpha');
   });
 
   it('returns the sentinel "-" when no project key is present', () => {
@@ -36,7 +38,7 @@ describe('getProjectName', () => {
   });
 
   it('returns the sentinel "-" when the project id is unresolvable', () => {
-    expect(getProjectName(conv({ uuid: 'e', project_uuid: 'unknown' }), projects)).toBe('-');
+    expect(getProjectName(conv({ project_uuid: 'unknown', uuid: 'e' }), projects)).toBe('-');
   });
 });
 
@@ -48,14 +50,14 @@ describe('createConversationList', () => {
   describe('search', () => {
     it('matches name, case-insensitively', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a', name: 'Hello World' })]);
+      list.setConversations([conv({ name: 'Hello World', uuid: 'a' })]);
       list.setSearch('WORLD');
       expect(list.view().map((c) => c.uuid)).toEqual(['a']);
     });
 
     it('matches summary', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a', name: 'Foo', summary: 'a bar baz' })]);
+      list.setConversations([conv({ name: 'Foo', summary: 'a bar baz', uuid: 'a' })]);
       list.setSearch('bar');
       expect(list.view().map((c) => c.uuid)).toEqual(['a']);
     });
@@ -72,8 +74,8 @@ describe('createConversationList', () => {
     it('projects mode overrides search scope to project name and disables status filters', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', name: 'zzz', project_uuid: 'p1' }),
-        conv({ uuid: 'b', name: 'Alpha thing', project_uuid: 'p2' }),
+        conv({ name: 'zzz', project_uuid: 'p1', uuid: 'a' }),
+        conv({ name: 'Alpha thing', project_uuid: 'p2', uuid: 'b' }),
       ]);
       list.setProjects({ p1: 'Alpha', p2: 'Beta' });
       list.setExportRecords(staleBook(['a'])); // would matter for status filters, must not matter here
@@ -105,22 +107,22 @@ describe('createConversationList', () => {
     it('applies the implicit default sort (updated desc) with no user interaction', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', updated_at: '2024-01-01T00:00:00.000Z' }),
-        conv({ uuid: 'b', updated_at: '2024-02-01T00:00:00.000Z' }),
+        conv({ updated_at: '2024-01-01T00:00:00.000Z', uuid: 'a' }),
+        conv({ updated_at: '2024-02-01T00:00:00.000Z', uuid: 'b' }),
       ]);
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
     });
 
     it('toggling a new field sorts ascending, pushed to primary', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a', name: 'B' }), conv({ uuid: 'b', name: 'A' })]);
+      list.setConversations([conv({ name: 'B', uuid: 'a' }), conv({ name: 'A', uuid: 'b' })]);
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
     });
 
     it('toggling the primary field again flips direction', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a', name: 'B' }), conv({ uuid: 'b', name: 'A' })]);
+      list.setConversations([conv({ name: 'B', uuid: 'a' }), conv({ name: 'A', uuid: 'b' })]);
       list.toggleSort('name');
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b']);
@@ -129,9 +131,9 @@ describe('createConversationList', () => {
     it('primary + secondary sort applies secondary as tiebreaker', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', name: 'Z', created_at: '2024-01-02T00:00:00.000Z' }),
-        conv({ uuid: 'b', name: 'Z', created_at: '2024-01-01T00:00:00.000Z' }),
-        conv({ uuid: 'c', name: 'A', created_at: '2024-01-03T00:00:00.000Z' }),
+        conv({ created_at: '2024-01-02T00:00:00.000Z', name: 'Z', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'Z', uuid: 'b' }),
+        conv({ created_at: '2024-01-03T00:00:00.000Z', name: 'A', uuid: 'c' }),
       ]);
       list.toggleSort('name'); // primary: name asc
       list.toggleSort('created'); // primary: created asc, name becomes secondary
@@ -142,8 +144,8 @@ describe('createConversationList', () => {
     it('clicking an existing secondary promotes it to primary', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', name: 'B', created_at: '2024-01-01T00:00:00.000Z' }),
-        conv({ uuid: 'b', name: 'A', created_at: '2024-01-01T00:00:00.000Z' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'B', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'A', uuid: 'b' }),
       ]);
       list.toggleSort('created'); // stack: [created asc]
       list.toggleSort('name'); // stack: [name asc, created asc]
@@ -165,7 +167,7 @@ describe('createConversationList', () => {
   describe('sortValue via view ordering (field coverage)', () => {
     it('sorts by name', () => {
       const list = setup();
-      list.setConversations([conv({ uuid: 'a', name: 'b' }), conv({ uuid: 'b', name: 'a' })]);
+      list.setConversations([conv({ name: 'b', uuid: 'a' }), conv({ name: 'a', uuid: 'b' })]);
       list.toggleSort('name');
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
     });
@@ -173,7 +175,7 @@ describe('createConversationList', () => {
     it('sorts by project, using the "-" sentinel for missing projects', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', project_uuid: 'p1' }),
+        conv({ project_uuid: 'p1', uuid: 'a' }),
         conv({ uuid: 'b' }), // no project -> '-'
       ]);
       list.setProjects({ p1: 'Zeta' });
@@ -184,8 +186,8 @@ describe('createConversationList', () => {
     it('sorts by created', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', created_at: '2024-05-01T00:00:00.000Z' }),
-        conv({ uuid: 'b', created_at: '2024-01-01T00:00:00.000Z' }),
+        conv({ created_at: '2024-05-01T00:00:00.000Z', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', uuid: 'b' }),
       ]);
       list.toggleSort('created');
       expect(list.view().map((c) => c.uuid)).toEqual(['b', 'a']);
@@ -194,8 +196,8 @@ describe('createConversationList', () => {
     it('handles a missing/invalid date by treating it as Invalid Date (NaN, compares as neither > nor <)', () => {
       const list = setup();
       list.setConversations([
-        conv({ uuid: 'a', created_at: 'not-a-date' }),
-        conv({ uuid: 'b', created_at: '2024-01-01T00:00:00.000Z' }),
+        conv({ created_at: 'not-a-date', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', uuid: 'b' }),
       ]);
       list.toggleSort('created');
       // NaN comparisons (aVal > bVal and aVal < bVal) are both always false,
@@ -222,11 +224,11 @@ describe('createConversationList', () => {
   describe('selection', () => {
     function fiveConvs(): ConversationSummary[] {
       return [
-        conv({ uuid: 'a', name: 'A' }),
-        conv({ uuid: 'b', name: 'B' }),
-        conv({ uuid: 'c', name: 'C' }),
-        conv({ uuid: 'd', name: 'D' }),
-        conv({ uuid: 'e', name: 'E' }),
+        conv({ name: 'A', uuid: 'a' }),
+        conv({ name: 'B', uuid: 'b' }),
+        conv({ name: 'C', uuid: 'c' }),
+        conv({ name: 'D', uuid: 'd' }),
+        conv({ name: 'E', uuid: 'e' }),
       ];
     }
 
@@ -281,7 +283,7 @@ describe('createConversationList', () => {
       // view is now [e, d, c, b, a]
       list.check('e', 0, false);
       list.check('b', 3, true); // range over view indices 0..3 => e,d,c,b
-      expect(list.selected()).toEqual(new Set(['e', 'd', 'c', 'b']));
+      expect(list.selected()).toEqual(new Set(['b', 'c', 'd', 'e']));
     });
 
     it('checkAll(true) selects everything currently in view', () => {

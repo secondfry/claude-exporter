@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import { CE_ERROR_LOG_MAX, readErrorLog, sanitizeForDiagnostics } from './index';
 
 describe('sanitizeForDiagnostics', () => {
@@ -34,25 +35,25 @@ describe('readErrorLog', () => {
   });
 
   it('returns [] for a non-array', () => {
-    expect(readErrorLog({ ts: 'x', msg: 'y' })).toEqual([]);
+    expect(readErrorLog({ msg: 'y', ts: 'x' })).toEqual([]);
   });
 
   it('filters out entries missing ts or msg', () => {
     const entries = [
-      { ts: '2026-01-01T00:00:00.000Z', level: 'error', context: undefined, msg: 'ok' },
-      { level: 'error', context: undefined, msg: 'missing ts' },
-      { ts: '2026-01-01T00:00:00.000Z', level: 'error', context: undefined },
+      { context: undefined, level: 'error', msg: 'ok', ts: '2026-01-01T00:00:00.000Z' },
+      { context: undefined, level: 'error', msg: 'missing ts' },
+      { context: undefined, level: 'error', ts: '2026-01-01T00:00:00.000Z' },
     ];
     const result = readErrorLog(entries);
     expect(result).toEqual([
-      { ts: '2026-01-01T00:00:00.000Z', level: 'error', context: undefined, msg: 'ok' },
+      { context: undefined, level: 'error', msg: 'ok', ts: '2026-01-01T00:00:00.000Z' },
     ]);
   });
 
   it('keeps well-formed entries', () => {
     const entries = [
-      { ts: '2026-01-01T00:00:00.000Z', level: 'error', context: 'ctx', msg: 'boom', source: 's', line: 1, col: 2, stack: 'st' },
-      { ts: '2026-01-02T00:00:00.000Z', level: 'unhandledrejection', context: undefined, msg: 'rejected' },
+      { col: 2, context: 'ctx', level: 'error', line: 1, msg: 'boom', source: 's', stack: 'st', ts: '2026-01-01T00:00:00.000Z' },
+      { context: undefined, level: 'unhandledrejection', msg: 'rejected', ts: '2026-01-02T00:00:00.000Z' },
     ];
     const result = readErrorLog(entries);
     expect(result).toEqual(entries);

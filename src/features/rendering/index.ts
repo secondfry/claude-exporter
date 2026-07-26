@@ -3,9 +3,9 @@
 // Conversation as-is. Only the current branch of the message tree is rendered;
 // alternative branches from edited messages are not part of an Export.
 
-import { getCurrentBranch } from '../conversation/branch';
-import type { Conversation } from '../conversation/types';
-import { extractArtifactsFromMessage, isProgrammingLanguage } from '../artifacts';
+import { extractArtifactsFromMessage, isProgrammingLanguage } from '$features/artifacts';
+import { getCurrentBranch } from '$features/conversation/branch';
+import type { Conversation } from '$features/conversation/types';
 
 // Convert to markdown format
 function convertToMarkdown(
@@ -60,7 +60,7 @@ function convertToMarkdown(
         // Handle regular text content (skip tool_use, we handle artifacts separately)
         else if (content.type === 'text' && content.text) {
           // Remove old-format artifact tags from text
-          let textWithoutArtifacts = content.text.replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '').trim();
+          const textWithoutArtifacts = content.text.replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '').trim();
           if (textWithoutArtifacts) {
             markdown += `${textWithoutArtifacts}\n\n`;
           }
@@ -68,7 +68,7 @@ function convertToMarkdown(
       }
     } else if (message.text) {
       // Handle old format - remove artifact tags from text
-      let textWithoutArtifacts = message.text.replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '').trim();
+      const textWithoutArtifacts = message.text.replace(/<antArtifact[^>]*>[\s\S]*?<\/antArtifact>/g, '').trim();
       if (textWithoutArtifacts) {
         markdown += `${textWithoutArtifacts}\n\n`;
       }

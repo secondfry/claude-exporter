@@ -7,13 +7,13 @@
 // It previously carried its own copy of the pipeline and drifted from the
 // browse page's — see CLAUDE.md "Export Flow".
 
-import { remoteCache } from '../../features/cache';
-import { detectOrgId, fetchConversationList, fetchProjects } from '../../features/conversation/api';
-import { initErrorCapture } from '../../features/diagnostics';
-import { exportConversations } from '../../features/export/pipeline';
-import type { ExportOptions, ExportResult, ExportTarget } from '../../features/export/types';
-import { recordModelSnapshots } from '../../features/tracking';
-import { onMessage } from '../../platform';
+import { remoteCache } from '$features/cache';
+import { detectOrgId, fetchConversationList, fetchProjects } from '$features/conversation/api';
+import { initErrorCapture } from '$features/diagnostics';
+import { exportConversations } from '$features/export/pipeline';
+import type { ExportOptions, ExportResult, ExportTarget } from '$features/export/types';
+import { recordModelSnapshots } from '$features/tracking';
+import { onMessage } from '$platform';
 
 import type {
   ContentRequest,
@@ -32,26 +32,26 @@ declare global {
 // Callers only send the controls they expose (the popup's "Export All", for
 // one, has no thinking toggle), so anything absent falls back to here.
 const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
-  format: 'json',
-  includeChats: true,
-  includeThinking: false,
-  includeMetadata: false,
-  includeArtifacts: false,
-  extractArtifacts: false,
   artifactFormat: 'original',
+  extractArtifacts: false,
   flattenArtifacts: false,
+  format: 'json',
+  includeArtifacts: false,
+  includeChats: true,
+  includeMetadata: false,
+  includeThinking: false,
 };
 
 function resolveOptions(message: ExportOptionsMessage): ExportOptions {
   return {
-    format: message.format ?? DEFAULT_EXPORT_OPTIONS.format,
-    includeChats: message.includeChats ?? DEFAULT_EXPORT_OPTIONS.includeChats,
-    includeThinking: message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
-    includeMetadata: message.includeMetadata ?? DEFAULT_EXPORT_OPTIONS.includeMetadata,
-    includeArtifacts: message.includeArtifacts ?? DEFAULT_EXPORT_OPTIONS.includeArtifacts,
-    extractArtifacts: message.extractArtifacts ?? DEFAULT_EXPORT_OPTIONS.extractArtifacts,
     artifactFormat: message.artifactFormat ?? DEFAULT_EXPORT_OPTIONS.artifactFormat,
+    extractArtifacts: message.extractArtifacts ?? DEFAULT_EXPORT_OPTIONS.extractArtifacts,
     flattenArtifacts: message.flattenArtifacts ?? DEFAULT_EXPORT_OPTIONS.flattenArtifacts,
+    format: message.format ?? DEFAULT_EXPORT_OPTIONS.format,
+    includeArtifacts: message.includeArtifacts ?? DEFAULT_EXPORT_OPTIONS.includeArtifacts,
+    includeChats: message.includeChats ?? DEFAULT_EXPORT_OPTIONS.includeChats,
+    includeMetadata: message.includeMetadata ?? DEFAULT_EXPORT_OPTIONS.includeMetadata,
+    includeThinking: message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
   };
 }
 
@@ -59,9 +59,9 @@ function resolveOptions(message: ExportOptionsMessage): ExportOptions {
 // can succeed for most conversations and still say what it lost.
 function toExportResponse(result: ExportResult, attempted: number): ExportResponse {
   const response: ExportResponse = {
-    success: true,
     count: result.exportedIds.length,
     filename: result.filename,
+    success: true,
   };
   if (result.failedNames.length > 0) {
     response.warnings =
@@ -78,8 +78,8 @@ async function handleExportConversation(
   // loading the list, so there is nothing to validate a cached copy against and
   // this always refetches. It still populates the cache for later runs.
   const target: ExportTarget = {
-    uuid: request.conversationId,
     name: request.conversationName || request.conversationId,
+    uuid: request.conversationId,
   };
   const result = await exportConversations(request.orgId, [target], resolveOptions(request), {
     cache: remoteCache,
@@ -95,9 +95,9 @@ async function handleExportAllConversations(
   await recordModelSnapshots(conversations);
 
   const targets: ExportTarget[] = conversations.map((conv) => ({
-    uuid: conv.uuid,
     name: conv.name || conv.uuid,
     updatedAt: conv.updated_at,
+    uuid: conv.uuid,
   }));
 
   const result = await exportConversations(request.orgId, targets, resolveOptions(request), {
@@ -112,22 +112,22 @@ async function handleExportAllConversations(
 function route(request: ContentRequest): Promise<unknown> | undefined {
   switch (request?.action) {
     case 'detectOrgId':
-      return detectOrgId().then((orgId) => ({ success: true, orgId }));
-
-    case 'exportConversation':
-      return handleExportConversation(request);
+      return detectOrgId().then((orgId) => ({ orgId, success: true }));
 
     case 'exportAllConversations':
       return handleExportAllConversations(request);
 
+    case 'exportConversation':
+      return handleExportConversation(request);
+
     case 'loadConversations':
       return fetchConversationList(request.orgId).then(async (conversations) => {
         await recordModelSnapshots(conversations);
-        return { success: true, conversations };
+        return { conversations, success: true };
       });
 
     case 'loadProjects':
-      return fetchProjects(request.orgId).then((projects) => ({ success: true, projects }));
+      return fetchProjects(request.orgId).then((projects) => ({ projects, success: true }));
 
     default:
       return undefined;

@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { storageGet, storageSet } from '../../platform';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { storageGet, storageSet } from '$platform';
+
 import { importBackup, isBackupFile, mergeStorageData } from './index';
 
 interface BackupMeta {
   app: string;
   backupVersion: number;
-  extensionVersion: string;
   createdAt: string;
+  extensionVersion: string;
 }
 
 interface BackupShape {
@@ -23,10 +25,10 @@ function makeBackup(overrides?: {
     _meta: {
       app: 'claude-exporter',
       backupVersion: 1,
-      extensionVersion: '1.0.0',
       createdAt: '2026-01-01T00:00:00.000Z',
+      extensionVersion: '1.0.0',
     },
-    local: overrides?.local ?? { modelSnapshots: { a: 1 }, exportTimestamps: { b: 2 } },
+    local: overrides?.local ?? { exportTimestamps: { b: 2 }, modelSnapshots: { a: 1 } },
     sync: overrides?.sync ?? { organizationId: 'org-1' },
   };
 }

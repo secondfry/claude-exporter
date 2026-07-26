@@ -1,35 +1,36 @@
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ArtifactFile } from '../artifacts';
-import type { Conversation } from '../conversation/types';
+import type { ArtifactFile } from '$features/artifacts';
+import type { Conversation } from '$features/conversation/types';
+
 import { exportConversations } from './pipeline';
 import type { ExportOptions, ExportTarget } from './types';
 
-vi.mock('../conversation/api', () => ({
+vi.mock('$features/conversation/api', () => ({
   fetchConversation: vi.fn(),
 }));
-vi.mock('../artifacts', () => ({
+vi.mock('$features/artifacts', () => ({
   extractArtifactFiles: vi.fn(() => [] as ArtifactFile[]),
 }));
-vi.mock('../rendering', () => ({
+vi.mock('$features/rendering', () => ({
   convertToMarkdown: vi.fn((data: Conversation) => `# ${data.name}`),
   convertToText: vi.fn((data: Conversation) => `TEXT ${data.name}`),
 }));
-vi.mock('../models', () => ({
+vi.mock('$features/models', () => ({
   inferModel: vi.fn(() => 'claude-test'),
 }));
-vi.mock('../tracking', () => ({
+vi.mock('$features/tracking', () => ({
   recordExports: vi.fn(async () => undefined),
 }));
 
-const { fetchConversation } = await import('../conversation/api');
-const { extractArtifactFiles } = await import('../artifacts');
-const { recordExports } = await import('../tracking');
+const { fetchConversation } = await import('$features/conversation/api');
+const { extractArtifactFiles } = await import('$features/artifacts');
+const { recordExports } = await import('$features/tracking');
 
 interface CapturedDownload {
-  filename: string;
   blob: Blob;
+  filename: string;
 }
 
 let downloads: CapturedDownload[] = [];
@@ -42,14 +43,14 @@ function installDomStub(): void {
   let counter = 0;
 
   const documentStub = {
-    createElement: () => ({ href: '', download: '', click: () => {} }),
     body: {
-      appendChild: (el: { href: string; download: string }) => {
+      appendChild: (el: { download: string; href: string; }) => {
         const blob = blobsByUrl.get(el.href);
-        if (blob) downloads.push({ filename: el.download, blob });
+        if (blob) downloads.push({ blob, filename: el.download });
       },
       removeChild: () => {},
     },
+    createElement: () => ({ download: '', href: '', click: () => {} }),
   };
 
   vi.stubGlobal('document', documentStub);
@@ -65,36 +66,36 @@ function installDomStub(): void {
 
 function conversation(uuid: string, name: string): Conversation {
   return {
-    uuid,
-    name,
+    chat_messages: [{ sender: 'human', text: 'hi', uuid: 'm1' }],
     created_at: '2025-01-01T00:00:00Z',
+    name,
     updated_at: '2025-01-02T00:00:00Z',
-    chat_messages: [{ uuid: 'm1', sender: 'human', text: 'hi' }],
+    uuid,
   };
 }
 
 function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
   return {
-    format: 'markdown',
-    includeChats: true,
-    includeThinking: true,
-    includeMetadata: true,
-    includeArtifacts: true,
-    extractArtifacts: false,
     artifactFormat: 'original',
+    extractArtifacts: false,
     flattenArtifacts: false,
+    format: 'markdown',
+    includeArtifacts: true,
+    includeChats: true,
+    includeMetadata: true,
+    includeThinking: true,
     ...overrides,
   };
 }
 
 function targets(...names: string[]): ExportTarget[] {
-  return names.map((name, i) => ({ uuid: `uuid-${i}`, name }));
+  return names.map((name, i) => ({ name, uuid: `uuid-${i}` }));
 }
 
 async function zipPaths(blob: Blob): Promise<string[]> {
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   return Object.keys(zip.files)
-    .filter((path) => !zip.files[path]!.dir)
+    .filter((path) => !zip.files[path].dir)
     .sort();
 }
 
@@ -114,27 +115,27 @@ describe('single conversation, single file', () => {
     const result = await exportConversations('org', targets('First chat'), options());
 
     expect(downloads).toHaveLength(1);
-    expect(downloads[0]!.filename).toBe('First chat.md');
-    expect(await downloads[0]!.blob.text()).toBe('# First chat');
+    expect(downloads[0].filename).toBe('First chat.md');
+    expect(await downloads[0].blob.text()).toBe('# First chat');
     expect(result.exportedIds).toEqual(['uuid-0']);
     expect(result.artifactCount).toBe(0);
   });
 
   it('sanitises the filename', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', 'a/b: c'));
-    await exportConversations('org', [{ uuid: 'uuid-0', name: 'a/b: c' }], options());
-    expect(downloads[0]!.filename).toBe('a_b_ c.md');
+    await exportConversations('org', [{ name: 'a/b: c', uuid: 'uuid-0' }], options());
+    expect(downloads[0].filename).toBe('a_b_ c.md');
   });
 
   it('falls back to the uuid when the conversation is unnamed', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', ''));
-    await exportConversations('org', [{ uuid: 'uuid-0', name: '' }], options());
-    expect(downloads[0]!.filename).toBe('uuid-0.md');
+    await exportConversations('org', [{ name: '', uuid: 'uuid-0' }], options());
+    expect(downloads[0].filename).toBe('uuid-0.md');
   });
 
   it('uses the format extension', async () => {
     await exportConversations('org', targets('First chat'), options({ format: 'json' }));
-    expect(downloads[0]!.filename).toBe('First chat.json');
+    expect(downloads[0].filename).toBe('First chat.json');
   });
 
   it('rejects when the only conversation fails to fetch', async () => {
@@ -155,8 +156,8 @@ describe('single conversation, single file', () => {
 describe('single conversation, multiple files', () => {
   it('ZIPs nested artifacts under an artifacts/ subfolder at the root', async () => {
     vi.mocked(extractArtifactFiles).mockReturnValue([
-      { filename: 'a.py', content: 'print(1)' },
-      { filename: 'b.py', content: 'print(2)' },
+      { content: 'print(1)', filename: 'a.py' },
+      { content: 'print(2)', filename: 'b.py' },
     ]);
 
     const result = await exportConversations(
@@ -165,8 +166,8 @@ describe('single conversation, multiple files', () => {
       options({ extractArtifacts: true })
     );
 
-    expect(downloads[0]!.filename).toBe('First chat.zip');
-    expect(await zipPaths(downloads[0]!.blob)).toEqual([
+    expect(downloads[0].filename).toBe('First chat.zip');
+    expect(await zipPaths(downloads[0].blob)).toEqual([
       'First chat.md',
       'artifacts/a.py',
       'artifacts/b.py',
@@ -176,8 +177,8 @@ describe('single conversation, multiple files', () => {
 
   it('puts artifacts at the root when chats are excluded', async () => {
     vi.mocked(extractArtifactFiles).mockReturnValue([
-      { filename: 'a.py', content: 'print(1)' },
-      { filename: 'b.py', content: 'print(2)' },
+      { content: 'print(1)', filename: 'a.py' },
+      { content: 'print(2)', filename: 'b.py' },
     ]);
 
     await exportConversations(
@@ -186,11 +187,11 @@ describe('single conversation, multiple files', () => {
       options({ extractArtifacts: true, includeChats: false })
     );
 
-    expect(await zipPaths(downloads[0]!.blob)).toEqual(['a.py', 'b.py']);
+    expect(await zipPaths(downloads[0].blob)).toEqual(['a.py', 'b.py']);
   });
 
   it('uses Chats/ and prefixed Artifacts/ for the flat layout', async () => {
-    vi.mocked(extractArtifactFiles).mockReturnValue([{ filename: 'a.py', content: 'print(1)' }]);
+    vi.mocked(extractArtifactFiles).mockReturnValue([{ content: 'print(1)', filename: 'a.py' }]);
 
     await exportConversations(
       'org',
@@ -198,14 +199,14 @@ describe('single conversation, multiple files', () => {
       options({ flattenArtifacts: true })
     );
 
-    expect(await zipPaths(downloads[0]!.blob)).toEqual([
+    expect(await zipPaths(downloads[0].blob)).toEqual([
       'Artifacts/First chat_a.py',
       'Chats/First chat.md',
     ]);
   });
 
   it('downloads the lone artifact directly when it is the only output', async () => {
-    vi.mocked(extractArtifactFiles).mockReturnValue([{ filename: 'a.py', content: 'print(1)' }]);
+    vi.mocked(extractArtifactFiles).mockReturnValue([{ content: 'print(1)', filename: 'a.py' }]);
 
     await exportConversations(
       'org',
@@ -213,8 +214,8 @@ describe('single conversation, multiple files', () => {
       options({ extractArtifacts: true, includeChats: false })
     );
 
-    expect(downloads[0]!.filename).toBe('a.py');
-    expect(await downloads[0]!.blob.text()).toBe('print(1)');
+    expect(downloads[0].filename).toBe('a.py');
+    expect(await downloads[0].blob.text()).toBe('print(1)');
   });
 
   it('skips the ZIP when artifact extraction is on but finds nothing', async () => {
@@ -223,7 +224,7 @@ describe('single conversation, multiple files', () => {
       targets('First chat'),
       options({ extractArtifacts: true })
     );
-    expect(downloads[0]!.filename).toBe('First chat.md');
+    expect(downloads[0].filename).toBe('First chat.md');
   });
 });
 
@@ -232,13 +233,13 @@ describe('multiple conversations', () => {
     const result = await exportConversations('org', targets('First chat', 'Second chat'), options());
 
     expect(downloads).toHaveLength(1);
-    expect(downloads[0]!.filename).toMatch(/^claude-exports-\d{8}-\d{6}\.zip$/);
-    expect(await zipPaths(downloads[0]!.blob)).toEqual(['First chat.md', 'Second chat.md']);
+    expect(downloads[0].filename).toMatch(/^claude-exports-\d{8}-\d{6}\.zip$/);
+    expect(await zipPaths(downloads[0].blob)).toEqual(['First chat.md', 'Second chat.md']);
     expect(result.exportedIds).toEqual(['uuid-0', 'uuid-1']);
   });
 
   it('gives each conversation its own folder in the nested layout', async () => {
-    vi.mocked(extractArtifactFiles).mockReturnValue([{ filename: 'a.py', content: 'print(1)' }]);
+    vi.mocked(extractArtifactFiles).mockReturnValue([{ content: 'print(1)', filename: 'a.py' }]);
 
     await exportConversations(
       'org',
@@ -246,7 +247,7 @@ describe('multiple conversations', () => {
       options({ extractArtifacts: true })
     );
 
-    expect(await zipPaths(downloads[0]!.blob)).toEqual([
+    expect(await zipPaths(downloads[0].blob)).toEqual([
       'First chat/artifacts/a.py',
       'First chat/First chat.md',
       'Second chat/artifacts/a.py',
@@ -255,7 +256,7 @@ describe('multiple conversations', () => {
   });
 
   it('uses the claude-artifacts prefix for a flat artifacts-only export', async () => {
-    vi.mocked(extractArtifactFiles).mockReturnValue([{ filename: 'a.py', content: 'print(1)' }]);
+    vi.mocked(extractArtifactFiles).mockReturnValue([{ content: 'print(1)', filename: 'a.py' }]);
 
     await exportConversations(
       'org',
@@ -263,8 +264,8 @@ describe('multiple conversations', () => {
       options({ flattenArtifacts: true, includeChats: false })
     );
 
-    expect(downloads[0]!.filename).toMatch(/^claude-artifacts-\d{8}-\d{6}\.zip$/);
-    expect(await zipPaths(downloads[0]!.blob)).toEqual([
+    expect(downloads[0].filename).toMatch(/^claude-artifacts-\d{8}-\d{6}\.zip$/);
+    expect(await zipPaths(downloads[0].blob)).toEqual([
       'Artifacts/First chat_a.py',
       'Artifacts/Second chat_a.py',
     ]);
@@ -280,7 +281,7 @@ describe('multiple conversations', () => {
 
     expect(result.failedNames).toEqual(['Second chat']);
     expect(result.exportedIds).toEqual(['uuid-0']);
-    expect(await zipPaths(downloads[0]!.blob)).toEqual(['First chat.md']);
+    expect(await zipPaths(downloads[0].blob)).toEqual(['First chat.md']);
   });
 
   it('reports fetching then zipping progress', async () => {
@@ -298,7 +299,7 @@ describe('Export Records only for conversations that produced a file', () => {
     // Chats off, artifacts flat: only the second conversation has artifacts, so
     // only it may get an Export Record. The other one never became a file.
     vi.mocked(extractArtifactFiles).mockImplementation((data: Conversation) =>
-      data.uuid === 'uuid-1' ? [{ filename: 'a.py', content: 'print(1)' }] : []
+      data.uuid === 'uuid-1' ? [{ content: 'print(1)', filename: 'a.py' }] : []
     );
 
     const result = await exportConversations(
@@ -310,7 +311,7 @@ describe('Export Records only for conversations that produced a file', () => {
     expect(result.exportedIds).toEqual(['uuid-1']);
     expect(result.failedNames).toEqual([]);
     expect(result.artifactCount).toBe(1);
-    expect(await zipPaths(downloads[0]!.blob)).toEqual(['Artifacts/Second chat_a.py']);
+    expect(await zipPaths(downloads[0].blob)).toEqual(['Artifacts/Second chat_a.py']);
   });
 
   it('keeps exportedIds in target order regardless of fetch completion order', async () => {
@@ -333,34 +334,34 @@ describe('filenames come from the fetched conversation', () => {
   it('uses the fetched name when the caller supplied none (popup Export Current)', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', 'Quarterly plan'));
 
-    await exportConversations('org', [{ uuid: 'uuid-0', name: '' }], options());
+    await exportConversations('org', [{ name: '', uuid: 'uuid-0' }], options());
 
-    expect(downloads[0]!.filename).toBe('Quarterly plan.md');
+    expect(downloads[0].filename).toBe('Quarterly plan.md');
   });
 
   it('prefers the fetched name over a stale caller-supplied one', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', 'Renamed chat'));
 
-    await exportConversations('org', [{ uuid: 'uuid-0', name: 'Old title' }], options());
+    await exportConversations('org', [{ name: 'Old title', uuid: 'uuid-0' }], options());
 
-    expect(downloads[0]!.filename).toBe('Renamed chat.md');
+    expect(downloads[0].filename).toBe('Renamed chat.md');
   });
 
   it('sanitises the fetched name and uses it for the single-conversation ZIP', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', 'a/b: c'));
     vi.mocked(extractArtifactFiles).mockReturnValue([
-      { filename: 'a.py', content: 'print(1)' },
-      { filename: 'b.py', content: 'print(2)' },
+      { content: 'print(1)', filename: 'a.py' },
+      { content: 'print(2)', filename: 'b.py' },
     ]);
 
     await exportConversations(
       'org',
-      [{ uuid: 'uuid-0', name: '' }],
+      [{ name: '', uuid: 'uuid-0' }],
       options({ extractArtifacts: true })
     );
 
-    expect(downloads[0]!.filename).toBe('a_b_ c.zip');
-    expect(await zipPaths(downloads[0]!.blob)).toEqual([
+    expect(downloads[0].filename).toBe('a_b_ c.zip');
+    expect(await zipPaths(downloads[0].blob)).toEqual([
       'a_b_ c.md',
       'artifacts/a.py',
       'artifacts/b.py',
@@ -370,9 +371,9 @@ describe('filenames come from the fetched conversation', () => {
   it('falls back to the uuid when neither the caller nor the response names it', async () => {
     vi.mocked(fetchConversation).mockResolvedValue(conversation('uuid-0', ''));
 
-    await exportConversations('org', [{ uuid: 'uuid-0', name: '' }], options());
+    await exportConversations('org', [{ name: '', uuid: 'uuid-0' }], options());
 
-    expect(downloads[0]!.filename).toBe('uuid-0.md');
+    expect(downloads[0].filename).toBe('uuid-0.md');
   });
 });
 
@@ -411,7 +412,7 @@ describe('cancellation', () => {
       return conversation(uuid, uuid);
     });
 
-    const many = Array.from({ length: 9 }, (_, i) => ({ uuid: `u${i}`, name: `c${i}` }));
+    const many = Array.from({ length: 9 }, (_, i) => ({ name: `c${i}`, uuid: `u${i}` }));
     await expect(
       exportConversations('org', many, options(), { signal: controller.signal })
     ).rejects.toThrow(/abort/i);
@@ -443,14 +444,14 @@ describe('the Chat Cache', () => {
 
     const result = await exportConversations(
       'org',
-      [{ uuid: 'uuid-0', name: 'Cached chat', updatedAt: '2025-01-02T00:00:00Z' }],
+      [{ name: 'Cached chat', updatedAt: '2025-01-02T00:00:00Z', uuid: 'uuid-0' }],
       options(),
       { cache: port }
     );
 
     expect(fetchConversation).not.toHaveBeenCalled();
     expect(result.fromCache).toBe(1);
-    expect(await downloads[0]!.blob.text()).toBe('# Cached chat');
+    expect(await downloads[0].blob.text()).toBe('# Cached chat');
   });
 
   it('refetches when the conversation has changed since it was stored', async () => {
@@ -458,7 +459,7 @@ describe('the Chat Cache', () => {
 
     const result = await exportConversations(
       'org',
-      [{ uuid: 'uuid-0', name: 'Chat', updatedAt: '2025-06-06T00:00:00Z' }],
+      [{ name: 'Chat', updatedAt: '2025-06-06T00:00:00Z', uuid: 'uuid-0' }],
       options(),
       { cache: port }
     );
@@ -495,8 +496,8 @@ describe('the Chat Cache', () => {
     const result = await exportConversations(
       'org',
       [
-        { uuid: 'uuid-0', name: 'First chat', updatedAt: '2025-01-02T00:00:00Z' },
-        { uuid: 'uuid-1', name: 'Second chat', updatedAt: '2025-01-02T00:00:00Z' },
+        { name: 'First chat', updatedAt: '2025-01-02T00:00:00Z', uuid: 'uuid-0' },
+        { name: 'Second chat', updatedAt: '2025-01-02T00:00:00Z', uuid: 'uuid-1' },
       ],
       options(),
       { cache: port }
@@ -504,7 +505,7 @@ describe('the Chat Cache', () => {
 
     expect(fetchConversation).not.toHaveBeenCalled();
     expect(result.fromCache).toBe(2);
-    expect(await zipPaths(downloads[0]!.blob)).toEqual(['First chat.md', 'Second chat.md']);
+    expect(await zipPaths(downloads[0].blob)).toEqual(['First chat.md', 'Second chat.md']);
   });
 
   // A full cache is a slower next export, never a failed one.
@@ -537,7 +538,7 @@ describe('the Chat Cache', () => {
 describe('writing Export Records', () => {
   it('records only the succeeded ids, not a target that fetched fine but produced nothing', async () => {
     vi.mocked(extractArtifactFiles).mockImplementation((data: Conversation) =>
-      data.uuid === 'uuid-1' ? [{ filename: 'a.py', content: 'print(1)' }] : []
+      data.uuid === 'uuid-1' ? [{ content: 'print(1)', filename: 'a.py' }] : []
     );
 
     const result = await exportConversations(

@@ -3,7 +3,7 @@
 // chronological order. Claude conversations are trees, not lists: everything
 // that renders or exports one needs the branch the user is actually looking at.
 
-import type { Conversation, ChatMessage } from './types';
+import type { ChatMessage, Conversation } from './types';
 
 // Helper function to reconstruct the current branch from the message tree
 function getCurrentBranch(data: Conversation): ChatMessage[] {

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchConversation, fetchConversationList, fetchProjects, detectOrgId, CONVERSATION_QUERY } from './api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { CONVERSATION_QUERY, detectOrgId, fetchConversation, fetchConversationList, fetchProjects } from './api';
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -101,8 +102,8 @@ describe('conversation/api', () => {
     it('hits the organizations URL and picks the org with "chat" capability', async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         jsonResponse([
-          { uuid: 'api-org', capabilities: ['api'] },
-          { uuid: 'chat-org', capabilities: ['chat', 'claude_pro'] },
+          { capabilities: ['api'], uuid: 'api-org' },
+          { capabilities: ['chat', 'claude_pro'], uuid: 'chat-org' },
         ]),
       );
       vi.stubGlobal('fetch', fetchMock);
@@ -116,8 +117,8 @@ describe('conversation/api', () => {
     it('falls back to the first org when none has chat capability', async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         jsonResponse([
-          { uuid: 'first-org', capabilities: ['api'] },
-          { uuid: 'second-org', capabilities: ['other'] },
+          { capabilities: ['api'], uuid: 'first-org' },
+          { capabilities: ['other'], uuid: 'second-org' },
         ]),
       );
       vi.stubGlobal('fetch', fetchMock);

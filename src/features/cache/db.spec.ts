@@ -1,12 +1,11 @@
 import 'fake-indexeddb/auto';
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Conversation } from '../conversation/types';
+import type { Conversation } from '$features/conversation/types';
 
 // index.ts pulls in the browser adapter for the content script's relay port,
 // which touches `chrome` at module load. None of these tests use that path.
-vi.mock('../../platform', () => ({
+vi.mock('$platform', () => ({
   sendMessageToRuntime: vi.fn(),
 }));
 
@@ -16,11 +15,11 @@ import { REQUEST_SIGNATURE, toRecord } from './schema';
 
 function conversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
-    uuid: 'conv-1',
-    name: 'A chat',
-    created_at: '2026-01-01T00:00:00.000000Z',
-    updated_at: '2026-02-02T12:00:00.000000Z',
     chat_messages: [],
+    created_at: '2026-01-01T00:00:00.000000Z',
+    name: 'A chat',
+    updated_at: '2026-02-02T12:00:00.000000Z',
+    uuid: 'conv-1',
     ...overrides,
   };
 }

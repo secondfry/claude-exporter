@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { CONVERSATION_QUERY } from '../conversation/api';
-import type { Conversation } from '../conversation/types';
+import { CONVERSATION_QUERY } from '$features/conversation/api';
+import type { Conversation } from '$features/conversation/types';
 
-import { REQUEST_SIGNATURE, isFresh, toRecord } from './schema';
+import { isFresh, REQUEST_SIGNATURE, toRecord } from './schema';
 import type { CacheRecord } from './schema';
 
 function conversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
-    uuid: 'conv-1',
-    name: 'A chat',
-    created_at: '2026-01-01T00:00:00.000000Z',
-    updated_at: '2026-02-02T12:00:00.000000Z',
     chat_messages: [],
+    created_at: '2026-01-01T00:00:00.000000Z',
+    name: 'A chat',
+    updated_at: '2026-02-02T12:00:00.000000Z',
+    uuid: 'conv-1',
     ...overrides,
   };
 }

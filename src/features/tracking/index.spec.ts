@@ -1,29 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import type { ConversationSummary } from '$features/conversation/types';
 // vitest.setup.ts installs a real in-memory chrome.storage stub, so tracking
 // exercises the real platform code path. That matters here specifically:
 // the concurrency/serialisation tests below need an honest storage
 // round-trip to be a meaningful regression guard for the write queue.
-import { storageGet, storageSet } from '../../platform';
+import { storageGet, storageSet } from '$platform';
+
 import {
-  loadExportRecords,
-  emptyExportRecords,
-  recordExports,
-  markExported,
   clearExportRecords,
-  loadModelDisplay,
+  emptyExportRecords,
   emptyModelDisplay,
+  loadExportRecords,
+  loadModelDisplay,
+  markExported,
+  recordExports,
   recordModelSnapshots,
 } from './index';
-import type { ConversationSummary } from '../conversation/types';
 
 function conv(uuid: string, updatedAt: string, model: string | null = null): ConversationSummary {
   return {
-    uuid,
-    name: 'Test',
     created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: updatedAt,
     model,
+    name: 'Test',
+    updated_at: updatedAt,
+    uuid,
   };
 }
 
@@ -58,15 +59,15 @@ describe('tracking', () => {
 
   describe('recordExports (merge semantics)', () => {
     it('stamps every uuid with the same timestamp and merges with existing records', async () => {
-      await storageSet('local', { exportTimestamps: { keep: 'keep-ts', c1: 'stale-ts' } });
+      await storageSet('local', { exportTimestamps: { c1: 'stale-ts', keep: 'keep-ts' } });
 
       const book = await recordExports(['c1', 'c2'], '2026-06-01T00:00:00.000Z');
 
       const { exportTimestamps } = await storageGet<{ exportTimestamps: Record<string, string> }>('local', ['exportTimestamps']);
       expect(exportTimestamps).toEqual({
-        keep: 'keep-ts',
         c1: '2026-06-01T00:00:00.000Z',
         c2: '2026-06-01T00:00:00.000Z',
+        keep: 'keep-ts',
       });
       expect(book.isStale(conv('c1', '2026-06-01T00:00:00.000Z'))).toBe(false);
       expect(book.isStale(conv('c1', '2026-06-01T00:00:00.001Z'))).toBe(true);
@@ -163,7 +164,7 @@ describe('tracking', () => {
       await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus')]);
 
       const { modelSnapshots } = await storageGet<{
-        modelSnapshots: Record<string, { firstSeen: string; current: string; history: Array<{ model: string; at: string }> }>;
+        modelSnapshots: Record<string, { current: string; firstSeen: string; history: Array<{ at: string; model: string; }> }>;
       }>('local', ['modelSnapshots']);
       expect(modelSnapshots.c1.firstSeen).toBe('claude-opus');
       expect(modelSnapshots.c1.current).toBe('claude-opus');
@@ -175,11 +176,11 @@ describe('tracking', () => {
       await storageSet('local', {
         modelSnapshots: {
           c1: {
-            firstSeen: 'claude-old',
-            firstSeenAt: '2026-01-01T00:00:00.000Z',
             current: 'claude-old',
             currentAt: '2026-01-01T00:00:00.000Z',
-            history: [{ model: 'claude-old', at: '2026-01-01T00:00:00.000Z' }],
+            firstSeen: 'claude-old',
+            firstSeenAt: '2026-01-01T00:00:00.000Z',
+            history: [{ at: '2026-01-01T00:00:00.000Z', model: 'claude-old' }],
           },
         },
       });
@@ -187,7 +188,7 @@ describe('tracking', () => {
       await recordModelSnapshots([conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new')]);
 
       const { modelSnapshots } = await storageGet<{
-        modelSnapshots: Record<string, { firstSeen: string; current: string; history: Array<{ model: string; at: string }> }>;
+        modelSnapshots: Record<string, { current: string; firstSeen: string; history: Array<{ at: string; model: string; }> }>;
       }>('local', ['modelSnapshots']);
       const snap = modelSnapshots.c1;
       expect(snap.firstSeen).toBe('claude-old');
@@ -200,11 +201,11 @@ describe('tracking', () => {
       await storageSet('local', {
         modelSnapshots: {
           c1: {
-            firstSeen: 'claude-old',
-            firstSeenAt: '2026-01-01T00:00:00.000Z',
             current: 'claude-old',
             currentAt: '2026-01-01T00:00:00.000Z',
-            history: [{ model: 'claude-old', at: '2026-01-01T00:00:00.000Z' }],
+            firstSeen: 'claude-old',
+            firstSeenAt: '2026-01-01T00:00:00.000Z',
+            history: [{ at: '2026-01-01T00:00:00.000Z', model: 'claude-old' }],
           },
         },
       });
@@ -288,45 +289,45 @@ describe('tracking', () => {
     it('returns the raw model with bounced=false and no "other" when there is no snapshot', async () => {
       const book = await loadModelDisplay('original');
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'));
-      expect(result).toEqual({ model: 'claude-x', bounced: false, other: '', otherLabel: '' });
+      expect(result).toEqual({ bounced: false, model: 'claude-x', other: '', otherLabel: '' });
     });
 
     it('emptyModelDisplay behaves the same as an empty loaded book', () => {
       const book = emptyModelDisplay('original');
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z', 'claude-x'));
-      expect(result).toEqual({ model: 'claude-x', bounced: false, other: '', otherLabel: '' });
+      expect(result).toEqual({ bounced: false, model: 'claude-x', other: '', otherLabel: '' });
     });
 
     it('"original" preference: shows first-seen as model, current as other/"Currently" when bounced', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { firstSeen: 'claude-a', firstSeenAt: 't0', current: 'claude-b', currentAt: 't1', history: [] },
+          c1: { current: 'claude-b', currentAt: 't1', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
         },
       });
       const book = await loadModelDisplay('original');
 
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z'));
 
-      expect(result).toEqual({ model: 'claude-a', bounced: true, other: 'claude-b', otherLabel: 'Currently' });
+      expect(result).toEqual({ bounced: true, model: 'claude-a', other: 'claude-b', otherLabel: 'Currently' });
     });
 
     it('"current" preference: shows current as model, first-seen as other/"Originally" when bounced', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { firstSeen: 'claude-a', firstSeenAt: 't0', current: 'claude-b', currentAt: 't1', history: [] },
+          c1: { current: 'claude-b', currentAt: 't1', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
         },
       });
       const book = await loadModelDisplay('current');
 
       const result = book.display(conv('c1', '2026-01-02T00:00:00.000Z'));
 
-      expect(result).toEqual({ model: 'claude-b', bounced: true, other: 'claude-a', otherLabel: 'Originally' });
+      expect(result).toEqual({ bounced: true, model: 'claude-b', other: 'claude-a', otherLabel: 'Originally' });
     });
 
     it('not bounced when the model never changed: still surfaces a matching "other"', async () => {
       await storageSet('local', {
         modelSnapshots: {
-          c1: { firstSeen: 'claude-a', firstSeenAt: 't0', current: 'claude-a', currentAt: 't0', history: [] },
+          c1: { current: 'claude-a', currentAt: 't0', firstSeen: 'claude-a', firstSeenAt: 't0', history: [] },
         },
       });
       const book = await loadModelDisplay('original');

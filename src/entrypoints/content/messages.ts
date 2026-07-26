@@ -12,9 +12,9 @@
 // controls they expose; the content script fills the rest from
 // DEFAULT_EXPORT_OPTIONS.
 
-import type { ConversationSummary } from '../../features/conversation/types';
-import type { Project } from '../../features/conversation/api';
-import type { ExportOptions } from '../../features/export/types';
+import type { Project } from '$features/conversation/api';
+import type { ConversationSummary } from '$features/conversation/types';
+import type { ExportOptions } from '$features/export/types';
 
 /** Export options as they appear on the wire: flat, and all optional. */
 type ExportOptionsMessage = Partial<ExportOptions>;
@@ -25,10 +25,10 @@ interface DetectOrgIdRequest {
 
 interface ExportConversationRequest extends ExportOptionsMessage {
   action: 'exportConversation';
-  orgId: string;
   conversationId: string;
   /** Display name, when the caller knows it. Falls back to the UUID. */
   conversationName?: string;
+  orgId: string;
 }
 
 interface ExportAllConversationsRequest extends ExportOptionsMessage {
@@ -48,8 +48,8 @@ interface LoadProjectsRequest {
 
 type ContentRequest =
   | DetectOrgIdRequest
-  | ExportConversationRequest
   | ExportAllConversationsRequest
+  | ExportConversationRequest
   | LoadConversationsRequest
   | LoadProjectsRequest;
 
@@ -57,38 +57,38 @@ type ContentAction = ContentRequest['action'];
 
 /** Every handler either succeeds with its payload, or fails with a message. */
 interface FailureResponse {
-  success: false;
   error: string;
+  success: false;
 }
 
 interface DetectOrgIdResponse {
-  success: true;
   orgId: string;
+  success: true;
 }
 
 interface ExportResponse {
-  success: true;
   /** Conversations that produced output and got an Export Record. */
   count: number;
   filename: string;
+  success: true;
   warnings?: string;
 }
 
 interface LoadConversationsResponse {
-  success: true;
   conversations: ConversationSummary[];
+  success: true;
 }
 
 interface LoadProjectsResponse {
-  success: true;
   projects: Project[];
+  success: true;
 }
 
 /** Maps each request to the success payload its handler resolves with. */
 interface ContentResponseMap {
   detectOrgId: DetectOrgIdResponse;
-  exportConversation: ExportResponse;
   exportAllConversations: ExportResponse;
+  exportConversation: ExportResponse;
   loadConversations: LoadConversationsResponse;
   loadProjects: LoadProjectsResponse;
 }
@@ -105,8 +105,8 @@ interface EnsureContentScriptRequest {
 }
 
 interface EnsureContentScriptResponse {
-  success: boolean;
   error?: string;
+  success: boolean;
 }
 
 export type {

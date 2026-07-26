@@ -5,26 +5,25 @@
 // every Conversation it succeeds on") — callers do not need to call
 // recordExports themselves.
 
-import type { CachePort } from '../cache/messages';
-import type { ArtifactFormat } from '../artifacts';
+import type { ArtifactFormat } from '$features/artifacts';
+import type { CachePort } from '$features/cache/messages';
 
 /** Output format for an exported conversation. */
-type ExportFormat = 'markdown' | 'text' | 'json';
+type ExportFormat = 'json' | 'markdown' | 'text';
 
 interface ExportOptions {
-  format: ExportFormat;
-  includeChats: boolean;
-  includeThinking: boolean;
-  includeMetadata: boolean;
-  includeArtifacts: boolean;
-  extractArtifacts: boolean;
   artifactFormat: ArtifactFormat;
+  extractArtifacts: boolean;
   flattenArtifacts: boolean;
+  format: ExportFormat;
+  includeArtifacts: boolean;
+  includeChats: boolean;
+  includeMetadata: boolean;
+  includeThinking: boolean;
 }
 
 /** A conversation the user asked to export, as known before fetching it. */
 interface ExportTarget {
-  uuid: string;
   name: string;
   /**
    * `updated_at` from the conversation list. The Chat Cache may only be read
@@ -33,28 +32,29 @@ interface ExportTarget {
    * open conversation) omit it and always refetch.
    */
   updatedAt?: string;
+  uuid: string;
 }
 
 interface ExportProgress {
-  phase: 'fetching' | 'zipping';
   completed: number;
-  total: number;
   failed: number;
   /** How many of `completed` came from the Chat Cache. */
   fromCache?: number;
+  phase: 'fetching' | 'zipping';
+  total: number;
 }
 
 interface ExportResult {
+  artifactCount: number;
+  /** The cache filled up mid-run. The export itself still succeeded. */
+  cacheQuotaExceeded: boolean;
   /** Conversations an Export Record was written for (a receipt, not a to-do). */
   exportedIds: string[];
   failedNames: string[];
-  artifactCount: number;
   /** The name of the file actually handed to the browser. */
   filename: string;
   /** Conversations served from the Chat Cache instead of the network. */
   fromCache: number;
-  /** The cache filled up mid-run. The export itself still succeeded. */
-  cacheQuotaExceeded: boolean;
   /**
    * False when the Export succeeded but its Export Records could not be
    * stored — the user has the file, so this never causes a rejection, but a
@@ -64,8 +64,6 @@ interface ExportResult {
 }
 
 interface ExportHooks {
-  onProgress?: (progress: ExportProgress) => void;
-  signal?: AbortSignal;
   /**
    * Where to look before fetching, and where to store what was fetched. The
    * caller supplies it because which implementation is correct depends on the
@@ -73,14 +71,16 @@ interface ExportHooks {
    * relay to the background worker. Omitting it disables the cache entirely.
    */
   cache?: CachePort;
+  onProgress?: (progress: ExportProgress) => void;
+  signal?: AbortSignal;
 }
 
 /** One file destined for the export, at its path inside the ZIP. */
 interface ExportEntry {
-  path: string;
   content: string;
   /** True for the conversation transcript, false for an extracted artifact. */
   isChat: boolean;
+  path: string;
 }
 
 export type {

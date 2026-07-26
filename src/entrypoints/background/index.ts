@@ -4,10 +4,10 @@
 // no DOM, and no module-level state that has to survive a restart — the worker
 // is torn down between events, so anything held here is gone by the next one.
 
-import { cacheStats, clearCache, readConversation, writeConversation } from '../../features/cache';
-import type { CacheRequest } from '../../features/cache/messages';
-import { injectScript, onInstalled, onMessage, queryTabs } from '../../platform';
-import type { EnsureContentScriptRequest } from '../content/messages';
+import type { EnsureContentScriptRequest } from '$entrypoints/content/messages';
+import { cacheStats, clearCache, readConversation, writeConversation } from '$features/cache';
+import type { CacheRequest } from '$features/cache/messages';
+import { injectScript, onInstalled, onMessage, queryTabs } from '$platform';
 
 /**
  * Must list EVERY content-script bundle declared in `content_scripts` in
@@ -68,20 +68,20 @@ onMessage((request: EnsureContentScriptRequest) => {
  */
 function routeCache(request: CacheRequest): Promise<unknown> | undefined {
   switch (request?.action) {
-    case 'cacheRead':
-      return readConversation(request.uuid, request.updatedAt).then((conversation) => ({
-        success: true,
-        conversation,
-      }));
-
-    case 'cacheWrite':
-      return writeConversation(request.conversation).then((status) => ({ success: true, status }));
-
-    case 'cacheStats':
-      return cacheStats().then((stats) => ({ success: true, stats }));
-
     case 'cacheClear':
       return clearCache().then(() => ({ success: true }));
+
+    case 'cacheRead':
+      return readConversation(request.uuid, request.updatedAt).then((conversation) => ({
+        conversation,
+        success: true,
+      }));
+
+    case 'cacheStats':
+      return cacheStats().then((stats) => ({ stats, success: true }));
+
+    case 'cacheWrite':
+      return writeConversation(request.conversation).then((status) => ({ status, success: true }));
 
     default:
       return undefined;

@@ -13,14 +13,14 @@ import type { ExportOptions } from './types';
 
 function options(overrides: Partial<ExportOptions> = {}): ExportOptions {
   return {
-    format: 'markdown',
-    includeChats: true,
-    includeThinking: true,
-    includeMetadata: true,
-    includeArtifacts: true,
-    extractArtifacts: false,
     artifactFormat: 'original',
+    extractArtifacts: false,
     flattenArtifacts: false,
+    format: 'markdown',
+    includeArtifacts: true,
+    includeChats: true,
+    includeMetadata: true,
+    includeThinking: true,
     ...overrides,
   };
 }
@@ -56,19 +56,19 @@ describe('getLocalDateTimeString', () => {
 describe('zipPrefix', () => {
   it('uses claude-artifacts only for flat, non-nested, chatless exports', () => {
     expect(
-      zipPrefix(options({ flattenArtifacts: true, extractArtifacts: false, includeChats: false }))
+      zipPrefix(options({ extractArtifacts: false, flattenArtifacts: true, includeChats: false }))
     ).toBe('claude-artifacts');
   });
 
   it('uses claude-exports when chats are included', () => {
     expect(
-      zipPrefix(options({ flattenArtifacts: true, extractArtifacts: false, includeChats: true }))
+      zipPrefix(options({ extractArtifacts: false, flattenArtifacts: true, includeChats: true }))
     ).toBe('claude-exports');
   });
 
   it('uses claude-exports when artifacts are nested', () => {
     expect(
-      zipPrefix(options({ flattenArtifacts: true, extractArtifacts: true, includeChats: false }))
+      zipPrefix(options({ extractArtifacts: true, flattenArtifacts: true, includeChats: false }))
     ).toBe('claude-exports');
   });
 

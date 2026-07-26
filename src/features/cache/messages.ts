@@ -9,15 +9,15 @@
 // acceptable outcome — the content script goes through the background worker
 // instead. See docs/adr/0003-chat-cache-lives-on-the-extension-origin.md.
 
-import type { Conversation } from '../conversation/types';
+import type { Conversation } from '$features/conversation/types';
 
 /** Refused for want of space; the export itself is unaffected. */
-type CacheWriteStatus = 'stored' | 'quota' | 'unavailable';
+type CacheWriteStatus = 'quota' | 'stored' | 'unavailable';
 
 interface CacheReadRequest {
   action: 'cacheRead';
-  uuid: string;
   updatedAt: string;
+  uuid: string;
 }
 
 interface CacheWriteRequest {
@@ -34,31 +34,31 @@ interface CacheClearRequest {
 }
 
 type CacheRequest =
+  | CacheClearRequest
   | CacheReadRequest
-  | CacheWriteRequest
   | CacheStatsRequest
-  | CacheClearRequest;
+  | CacheWriteRequest;
 
 interface CacheReadResponse {
-  success: true;
   conversation: Conversation | null;
+  success: true;
 }
 
 interface CacheWriteResponse {
-  success: true;
   status: CacheWriteStatus;
+  success: true;
 }
 
 interface CacheStats {
   entries: number;
+  quotaExceeded: boolean;
   /** Bytes this origin is using across all storage, when the browser says. */
   usageBytes: number | null;
-  quotaExceeded: boolean;
 }
 
 interface CacheStatsResponse {
-  success: true;
   stats: CacheStats;
+  success: true;
 }
 
 /**

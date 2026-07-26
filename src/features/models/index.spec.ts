@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { DEFAULT_MODEL_TIMELINE, inferModel, formatModelName, getModelBadgeClass } from './index';
+import { describe, expect, it } from 'vitest';
+
+import { DEFAULT_MODEL_TIMELINE, formatModelName, getModelBadgeClass, inferModel } from './index';
 
 // Regression: claude-opus-4-20250514 used to render as "Claude Opus 4.20250514"
 // because the optional minor group `(\d+)` was eating the 8-digit date.
@@ -111,32 +112,32 @@ describe('formatModelName — unknown family fallthrough', () => {
 
 describe('inferModel', () => {
   it('returns conversation.model when set, regardless of date', () => {
-    expect(inferModel({ model: 'claude-opus-4-7', created_at: '2024-01-01T00:00:00Z' } as any))
+    expect(inferModel({ created_at: '2024-01-01T00:00:00Z', model: 'claude-opus-4-7' } as any))
       .toBe('claude-opus-4-7');
   });
 
   it('falls back to timeline lookup when model is null', () => {
     // Mid-2024 → claude-3-5-sonnet-20240620
-    expect(inferModel({ model: null, created_at: '2024-08-01T00:00:00Z' } as any))
+    expect(inferModel({ created_at: '2024-08-01T00:00:00Z', model: null } as any))
       .toBe('claude-3-5-sonnet-20240620');
   });
 
   it('returns the most recent timeline entry for current dates', () => {
-    expect(inferModel({ model: null, created_at: '2026-04-01T00:00:00Z' } as any))
+    expect(inferModel({ created_at: '2026-04-01T00:00:00Z', model: null } as any))
       .toBe('claude-sonnet-4-6');
   });
 
   it('returns the earliest timeline entry for pre-timeline dates', () => {
-    expect(inferModel({ model: null, created_at: '2023-06-01T00:00:00Z' } as any))
+    expect(inferModel({ created_at: '2023-06-01T00:00:00Z', model: null } as any))
       .toBe('claude-3-sonnet-20240229');
   });
 
   it('uses correct model on timeline boundaries', () => {
     // 2024-06-20 is the first day of claude-3-5-sonnet-20240620
-    expect(inferModel({ model: null, created_at: '2024-06-20T00:00:00Z' } as any))
+    expect(inferModel({ created_at: '2024-06-20T00:00:00Z', model: null } as any))
       .toBe('claude-3-5-sonnet-20240620');
     // One second before that boundary should still be the prior model
-    expect(inferModel({ model: null, created_at: '2024-06-19T23:59:59Z' } as any))
+    expect(inferModel({ created_at: '2024-06-19T23:59:59Z', model: null } as any))
       .toBe('claude-3-sonnet-20240229');
   });
 });

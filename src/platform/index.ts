@@ -12,7 +12,7 @@
 // `chrome`. Declared rather than asserted so the union is checked, and read off
 // globalThis because a bare `browser` is a ReferenceError on Chrome.
 declare global {
-  // eslint-disable-next-line no-var
+   
   var browser: typeof chrome | undefined;
 }
 
@@ -66,7 +66,7 @@ function createTab(properties: chrome.tabs.CreateProperties): Promise<chrome.tab
 // only surviving code-level Chrome/Firefox difference in the old tree, and it
 // disappeared when Firefox moved to MV3 — both now take the same shape.
 function injectScript(tabId: number, files: string[]): Promise<unknown> {
-  return callApi<unknown>(() => api.scripting.executeScript({ target: { tabId }, files }));
+  return callApi<unknown>(() => api.scripting.executeScript({ files, target: { tabId } }));
 }
 
 function getExtensionUrl(path: string): string {
@@ -108,7 +108,7 @@ function onMessage(
     const result = handler(message, sender);
     if (!result) return false;
     result.then(sendResponse, error =>
-      sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+      sendResponse({ error: error instanceof Error ? error.message : String(error), success: false }),
     );
     return true;
   });
@@ -121,22 +121,22 @@ function onInstalled(handler: () => void): void {
 export {
   api,
   callApi,
-  storageGet,
-  storageSet,
-  storageRemove,
-  queryTabs,
-  sendMessageToTab,
-  sendMessageToRuntime,
+  CLAUDE_ORIGIN,
   createTab,
-  injectScript,
   getExtensionUrl,
   getManifestName,
   getManifestVersion,
-  openOptionsPage,
   hasClaudeAccess,
-  requestClaudeAccess,
-  onMessage,
+  injectScript,
   onInstalled,
-  CLAUDE_ORIGIN,
+  onMessage,
+  openOptionsPage,
+  queryTabs,
+  requestClaudeAccess,
+  sendMessageToRuntime,
+  sendMessageToTab,
+  storageGet,
+  storageRemove,
+  storageSet,
 };
 export type { StorageArea };

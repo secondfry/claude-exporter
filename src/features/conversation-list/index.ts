@@ -4,22 +4,22 @@
 // math. Rendering stays in the browse entrypoint;
 // this module is pure state + logic — no DOM, no storage, no `chrome`.
 
-import type { ConversationSummary } from '../conversation/types';
-import type { ExportRecordBook, DisplayModel } from '../tracking';
-import { emptyExportRecords } from '../tracking';
-import { formatModelName } from '../models';
+import type { ConversationSummary } from '$features/conversation/types';
+import { formatModelName } from '$features/models';
+import type { DisplayModel, ExportRecordBook } from '$features/tracking';
+import { emptyExportRecords } from '$features/tracking';
 
-type SortField = 'name' | 'project' | 'created' | 'updated' | 'model';
+type SortField = 'created' | 'model' | 'name' | 'project' | 'updated';
 type SortDirection = 'asc' | 'desc';
 interface SortCriterion {
-  field: SortField;
   direction: SortDirection;
+  field: SortField;
 }
 
-type StatusFilter = 'all' | 'new' | 'exported' | 'projects';
+type StatusFilter = 'all' | 'exported' | 'new' | 'projects';
 
 /** Default sort, used until the user clicks a column header. */
-const DEFAULT_SORT: SortCriterion = { field: 'updated', direction: 'desc' };
+const DEFAULT_SORT: SortCriterion = { direction: 'desc', field: 'updated' };
 
 /**
  * Something with a display() method for resolving a Conversation's model.
@@ -30,8 +30,8 @@ const DEFAULT_SORT: SortCriterion = { field: 'updated', direction: 'desc' };
  */
 interface ModelResolver {
   display(conv: ConversationSummary): {
-    model: string;
     bounced?: boolean;
+    model: string;
     other?: string;
     otherLabel?: DisplayModel['otherLabel'];
   };
@@ -58,28 +58,28 @@ function getProjectName(conv: ConversationSummary, projectsMap: Record<string, s
 }
 
 interface ConversationList {
-  setConversations(convs: ConversationSummary[]): void;
-  setProjects(projectsMap: Record<string, string>): void;
-  setExportRecords(book: ExportRecordBook): void;
-  setModels(book: ModelResolver): void;
-  setSearch(query: string): void;
-  setStatusFilter(filter: StatusFilter): void;
-  toggleSort(field: SortField): void;
-  sortIndicator(field: SortField): string;
-  view(): readonly ConversationSummary[];
   all(): readonly ConversationSummary[];
-  projectName(conv: ConversationSummary): string;
-  isStale(conv: ConversationSummary): boolean;
-  display(conv: ConversationSummary): ReturnType<ModelResolver['display']>;
+  allViewSelected(): boolean;
   check(uuid: string, index: number, shiftHeld: boolean): void;
   checkAll(checked: boolean): void;
-  selectStale(): void;
   clearSelection(): void;
+  display(conv: ConversationSummary): ReturnType<ModelResolver['display']>;
+  isStale(conv: ConversationSummary): boolean;
+  projectName(conv: ConversationSummary): string;
+  searchPlaceholder(): string;
   selected(): ReadonlySet<string>;
   selectedCount(): number;
+  selectStale(): void;
+  setConversations(convs: ConversationSummary[]): void;
+  setExportRecords(book: ExportRecordBook): void;
+  setModels(book: ModelResolver): void;
+  setProjects(projectsMap: Record<string, string>): void;
+  setSearch(query: string): void;
+  setStatusFilter(filter: StatusFilter): void;
+  sortIndicator(field: SortField): string;
   staleCount(): number;
-  allViewSelected(): boolean;
-  searchPlaceholder(): string;
+  toggleSort(field: SortField): void;
+  view(): readonly ConversationSummary[];
 }
 
 function createConversationList(): ConversationList {
@@ -94,18 +94,18 @@ function createConversationList(): ConversationList {
   const selectedUuids = new Set<string>();
   let lastCheckedIndex: number | null = null;
 
-  function sortValue(conv: ConversationSummary, field: SortField): string | number {
+  function sortValue(conv: ConversationSummary, field: SortField): number | string {
     switch (field) {
+      case 'created':
+        return new Date(conv.created_at).getTime();
+      case 'model':
+        return formatModelName(models.display(conv).model).toLowerCase();
       case 'name':
         return conv.name.toLowerCase();
       case 'project':
         return getProjectName(conv, projectsMap).toLowerCase();
-      case 'created':
-        return new Date(conv.created_at).getTime();
       case 'updated':
         return new Date(conv.updated_at).getTime();
-      case 'model':
-        return formatModelName(models.display(conv).model).toLowerCase();
     }
   }
 
@@ -117,7 +117,7 @@ function createConversationList(): ConversationList {
 
     viewConversations.sort((a, b) => {
       // Try each sort criterion in order until we find a difference
-      for (const { field, direction } of sortStack) {
+      for (const { direction, field } of sortStack) {
         const aVal = sortValue(a, field);
         const bVal = sortValue(b, field);
 
@@ -163,76 +163,13 @@ function createConversationList(): ConversationList {
   }
 
   return {
-    setConversations(convs) {
-      allConversations = convs;
-      recompute();
-    },
-    setProjects(map) {
-      projectsMap = map;
-      recompute();
-    },
-    setExportRecords(book) {
-      // Deliberately does NOT recompute the View. An Export Record only
-      // changes a row's staleness dot, not whether it belongs in the current
-      // filter/search/sort result — the View stays put (and lastCheckedIndex
-      // stays valid) until the user next touches the filter or search.
-      exportRecords = book;
-    },
-    setModels(book) {
-      models = book;
-      recompute();
-    },
-    setSearch(query) {
-      search = query.toLowerCase();
-      recompute();
-    },
-    setStatusFilter(filter) {
-      statusFilter = filter;
-      recompute();
-    },
-    toggleSort(field) {
-      const existingIndex = sortStack.findIndex((s) => s.field === field);
-
-      if (existingIndex === 0) {
-        // Clicking primary sort: toggle direction
-        sortStack[0]!.direction = sortStack[0]!.direction === 'asc' ? 'desc' : 'asc';
-      } else if (existingIndex > 0) {
-        // Clicking a secondary sort: move it to primary position
-        const [criterion] = sortStack.splice(existingIndex, 1);
-        sortStack.unshift(criterion!);
-      } else {
-        // New sort: add to front with ascending direction
-        sortStack.unshift({ field, direction: 'asc' });
-      }
-
-      recompute();
-    },
-    sortIndicator(field) {
-      const sortIndex = sortStack.findIndex((s) => s.field === field);
-
-      // Only show indicator for the primary (most recent) sort
-      if (sortIndex !== 0) return '';
-
-      const { direction } = sortStack[sortIndex]!;
-      const primaryArrow = direction === 'asc' ? '↑' : '↓';
-      const secondaryArrow = direction === 'asc' ? '↓' : '↑';
-
-      return ` <span class="sort-indicator">${primaryArrow}<sub>${secondaryArrow}</sub></span>`;
-    },
-    view() {
-      return viewConversations;
-    },
     all() {
       return allConversations;
     },
-    projectName(conv) {
-      return getProjectName(conv, projectsMap);
-    },
-    isStale(conv) {
-      return exportRecords.isStale(conv);
-    },
-    display(conv) {
-      return models.display(conv);
+    allViewSelected() {
+      // Checked when ANY are selected — not indeterminate, not "every row in
+      // the view". Matches the original updateSelectAllCheckbox exactly.
+      return selectedUuids.size > 0;
     },
     check(uuid, index, shiftHeld) {
       if (shiftHeld && lastCheckedIndex !== null) {
@@ -270,14 +207,20 @@ function createConversationList(): ConversationList {
       // Reset last checked index when using select all
       lastCheckedIndex = null;
     },
-    selectStale() {
-      selectedUuids.clear();
-      for (const conv of viewConversations) {
-        if (exportRecords.isStale(conv)) selectedUuids.add(conv.uuid);
-      }
-    },
     clearSelection() {
       selectedUuids.clear();
+    },
+    display(conv) {
+      return models.display(conv);
+    },
+    isStale(conv) {
+      return exportRecords.isStale(conv);
+    },
+    projectName(conv) {
+      return getProjectName(conv, projectsMap);
+    },
+    searchPlaceholder() {
+      return statusFilter === 'projects' ? 'Search projects by name...' : 'Search conversations by name...';
     },
     selected() {
       return selectedUuids;
@@ -285,16 +228,73 @@ function createConversationList(): ConversationList {
     selectedCount() {
       return selectedUuids.size;
     },
+    selectStale() {
+      selectedUuids.clear();
+      for (const conv of viewConversations) {
+        if (exportRecords.isStale(conv)) selectedUuids.add(conv.uuid);
+      }
+    },
+    setConversations(convs) {
+      allConversations = convs;
+      recompute();
+    },
+    setExportRecords(book) {
+      // Deliberately does NOT recompute the View. An Export Record only
+      // changes a row's staleness dot, not whether it belongs in the current
+      // filter/search/sort result — the View stays put (and lastCheckedIndex
+      // stays valid) until the user next touches the filter or search.
+      exportRecords = book;
+    },
+    setModels(book) {
+      models = book;
+      recompute();
+    },
+    setProjects(map) {
+      projectsMap = map;
+      recompute();
+    },
+    setSearch(query) {
+      search = query.toLowerCase();
+      recompute();
+    },
+    setStatusFilter(filter) {
+      statusFilter = filter;
+      recompute();
+    },
+    sortIndicator(field) {
+      const sortIndex = sortStack.findIndex((s) => s.field === field);
+
+      // Only show indicator for the primary (most recent) sort
+      if (sortIndex !== 0) return '';
+
+      const { direction } = sortStack[sortIndex];
+      const primaryArrow = direction === 'asc' ? '↑' : '↓';
+      const secondaryArrow = direction === 'asc' ? '↓' : '↑';
+
+      return ` <span class="sort-indicator">${primaryArrow}<sub>${secondaryArrow}</sub></span>`;
+    },
     staleCount() {
       return exportRecords.staleCount(allConversations);
     },
-    allViewSelected() {
-      // Checked when ANY are selected — not indeterminate, not "every row in
-      // the view". Matches the original updateSelectAllCheckbox exactly.
-      return selectedUuids.size > 0;
+    toggleSort(field) {
+      const existingIndex = sortStack.findIndex((s) => s.field === field);
+
+      if (existingIndex === 0) {
+        // Clicking primary sort: toggle direction
+        sortStack[0].direction = sortStack[0].direction === 'asc' ? 'desc' : 'asc';
+      } else if (existingIndex > 0) {
+        // Clicking a secondary sort: move it to primary position
+        const [criterion] = sortStack.splice(existingIndex, 1);
+        sortStack.unshift(criterion);
+      } else {
+        // New sort: add to front with ascending direction
+        sortStack.unshift({ direction: 'asc', field });
+      }
+
+      recompute();
     },
-    searchPlaceholder() {
-      return statusFilter === 'projects' ? 'Search projects by name...' : 'Search conversations by name...';
+    view() {
+      return viewConversations;
     },
   };
 }
