@@ -4,7 +4,7 @@ import type { ConversationSummary } from '$features/conversation/types';
 import type { ExportRecordBook, ExportStatus } from '$features/tracking';
 
 import { createConversationList, getProjectName } from './index';
-import type { ConversationList } from './index';
+import type { ConversationList, StatusFilter } from './index';
 
 const conv = (
   overrides: Partial<ConversationSummary> & { uuid: string },
@@ -141,6 +141,137 @@ describe('createConversationList', () => {
     });
   });
 
+  // The three-way status filter shipped in v1.21.0 and its interaction with
+  // the search box is the part users reported as wrong. Every status value is
+  // pinned both with and without a search term. Note setExportRecords does
+  // NOT recompute, so it must precede setStatusFilter/setSearch.
+  describe('status filter x search', () => {
+    // a: never, b: stale, c: current, d: stale. Names chosen so 'alpha'
+    // cuts across all three statuses.
+    const matrix = (): ConversationList => {
+      const list = setup();
+      list.setConversations([
+        conv({ name: 'alpha never', uuid: 'a' }),
+        conv({ name: 'beta stale', uuid: 'b' }),
+        conv({ name: 'alpha current', uuid: 'c' }),
+        conv({ name: 'alpha stale', uuid: 'd' }),
+      ]);
+      list.setExportRecords(bookOf({ a: 'never', b: 'stale', d: 'stale' }));
+      return list;
+    };
+
+    const viewOf = (filter: StatusFilter, search: string): string[] => {
+      const list = matrix();
+      list.setStatusFilter(filter);
+      list.setSearch(search);
+      return list.view().map((c) => c.uuid);
+    };
+
+    it('all: no search keeps everything', () => {
+      expect(viewOf('all', '')).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    it('all: search narrows by name across every status', () => {
+      expect(viewOf('all', 'alpha')).toEqual(['a', 'c', 'd']);
+    });
+
+    it('pending: no search keeps never + stale', () => {
+      expect(viewOf('pending', '')).toEqual(['a', 'b', 'd']);
+    });
+
+    it('pending: search and status are ANDed', () => {
+      expect(viewOf('pending', 'alpha')).toEqual(['a', 'd']);
+    });
+
+    it('never: no search keeps only conversations with no Export Record', () => {
+      expect(viewOf('never', '')).toEqual(['a']);
+    });
+
+    it('never: search further narrows the never set', () => {
+      expect(viewOf('never', 'alpha')).toEqual(['a']);
+      expect(viewOf('never', 'beta')).toEqual([]);
+    });
+
+    it('stale: no search keeps only Stale conversations', () => {
+      expect(viewOf('stale', '')).toEqual(['b', 'd']);
+    });
+
+    it('stale: search drops the Stale conversation that does not match', () => {
+      expect(viewOf('stale', 'alpha')).toEqual(['d']);
+    });
+
+    it('exported: no search keeps everything with an Export Record', () => {
+      expect(viewOf('exported', '')).toEqual(['b', 'c', 'd']);
+    });
+
+    it('exported: search narrows within the exported set', () => {
+      expect(viewOf('exported', 'alpha')).toEqual(['c', 'd']);
+    });
+
+    it('search also matches the summary, not just the name', () => {
+      const list = setup();
+      list.setConversations([
+        conv({ name: 'x', summary: 'alpha in summary', uuid: 'a' }),
+        conv({ name: 'y', uuid: 'b' }),
+      ]);
+      list.setExportRecords(bookOf({ a: 'never', b: 'never' }));
+      list.setStatusFilter('never');
+      list.setSearch('alpha');
+      expect(list.view().map((c) => c.uuid)).toEqual(['a']);
+    });
+
+    it('a non-string summary is ignored rather than throwing', () => {
+      const list = setup();
+      // ConversationSummary's index signature admits any summary shape.
+      list.setConversations([conv({ name: 'x', summary: 42, uuid: 'a' })]);
+      list.setSearch('42');
+      expect(list.view()).toHaveLength(0);
+    });
+
+    describe('projects mode', () => {
+      const projectMatrix = (): ConversationList => {
+        const list = setup();
+        list.setConversations([
+          conv({ name: 'zzz', project_uuid: 'p1', uuid: 'a' }),
+          conv({ name: 'Alpha thing', project_uuid: 'p2', uuid: 'b' }),
+          conv({ name: 'no project', uuid: 'c' }),
+        ]);
+        list.setProjects({ p1: 'Alpha', p2: 'Beta' });
+        list.setExportRecords(bookOf({ a: 'never', b: 'never', c: 'never' }));
+        list.setStatusFilter('projects');
+        return list;
+      };
+
+      it('empty search short-circuits to everything, including project-less conversations', () => {
+        const list = projectMatrix();
+        list.setSearch('');
+        expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b', 'c']);
+      });
+
+      it('a search scopes to the project name and excludes the "-" sentinel', () => {
+        const list = projectMatrix();
+        list.setSearch('alpha');
+        expect(list.view().map((c) => c.uuid)).toEqual(['a']);
+      });
+
+      it('the "-" sentinel is never matchable, even by searching for it', () => {
+        const list = projectMatrix();
+        list.setSearch('-');
+        expect(list.view().map((c) => c.uuid)).toEqual([]);
+      });
+
+      it('status is ignored: an "exported" conversation still shows', () => {
+        const list = setup();
+        list.setConversations([conv({ project_uuid: 'p1', uuid: 'a' })]);
+        list.setProjects({ p1: 'Alpha' });
+        list.setExportRecords(bookOf({})); // 'a' defaults to 'current'
+        list.setStatusFilter('projects');
+        list.setSearch('alpha');
+        expect(list.view().map((c) => c.uuid)).toEqual(['a']);
+      });
+    });
+  });
+
   describe('sort', () => {
     it('applies the implicit default sort (updated desc) with no user interaction', () => {
       const list = setup();
@@ -196,6 +327,45 @@ describe('createConversationList', () => {
       list.toggleSort('created'); // promote created back to primary: [created asc, name asc]
       expect(list.sortIndicator('created')).not.toBe('');
       expect(list.sortIndicator('name')).toBe('');
+    });
+
+    it('each criterion carries its own direction: flipping the primary leaves the secondary alone', () => {
+      const list = setup();
+      list.setConversations([
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'Z', uuid: 'a' }),
+        conv({ created_at: '2024-01-02T00:00:00.000Z', name: 'Z', uuid: 'b' }),
+        conv({ created_at: '2024-01-03T00:00:00.000Z', name: 'A', uuid: 'c' }),
+      ]);
+      list.toggleSort('created'); // stack: [created asc]
+      list.toggleSort('name'); // stack: [name asc, created asc]
+      list.toggleSort('name'); // stack: [name desc, created asc]
+      // 'Z' before 'A' (primary desc), then the Z-tie broken by created ASC —
+      // the secondary keeps the direction it was given.
+      expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('a tie on every criterion preserves input order (the comparator returns 0)', () => {
+      const list = setup();
+      list.setConversations([
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'b' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'c' }),
+      ]);
+      list.toggleSort('name');
+      list.toggleSort('created');
+      expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('the secondary criterion only breaks ties — it never reorders distinct primaries', () => {
+      const list = setup();
+      list.setConversations([
+        conv({ created_at: '2024-01-03T00:00:00.000Z', name: 'A', uuid: 'a' }),
+        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'B', uuid: 'b' }),
+      ]);
+      list.toggleSort('created'); // secondary-to-be: created asc
+      list.toggleSort('name'); // primary: name asc
+      // 'a' has the later created_at but the earlier name, and name wins.
+      expect(list.view().map((c) => c.uuid)).toEqual(['a', 'b']);
     });
 
     it('sortIndicator is only shown for the primary criterion', () => {

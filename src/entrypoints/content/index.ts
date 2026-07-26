@@ -15,19 +15,15 @@ import {
 } from '$features/conversation/api';
 import { initErrorCapture } from '$features/diagnostics';
 import { exportConversations } from '$features/export/pipeline';
-import type {
-  ExportOptions,
-  ExportResult,
-  ExportTarget,
-} from '$features/export/types';
+import type { ExportTarget } from '$features/export/types';
 import { recordModelSnapshots } from '$features/tracking';
 import { onMessage } from '$platform';
 
+import { resolveOptions, toExportResponse, toExportTargets } from './export';
 import type {
   ContentRequest,
   ExportAllConversationsRequest,
   ExportConversationRequest,
-  ExportOptionsMessage,
   ExportResponse,
 } from './messages';
 
@@ -36,57 +32,6 @@ declare global {
     claudeExporterContentScriptLoaded?: boolean;
   }
 }
-
-// Callers only send the controls they expose (the popup's "Export All", for
-// one, has no thinking toggle), so anything absent falls back to here.
-const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
-  artifactFormat: 'original',
-  extractArtifacts: false,
-  flattenArtifacts: false,
-  format: 'json',
-  includeArtifacts: false,
-  includeChats: true,
-  includeMetadata: false,
-  includeThinking: false,
-};
-
-const resolveOptions = (message: ExportOptionsMessage): ExportOptions => {
-  return {
-    artifactFormat:
-      message.artifactFormat ?? DEFAULT_EXPORT_OPTIONS.artifactFormat,
-    extractArtifacts:
-      message.extractArtifacts ?? DEFAULT_EXPORT_OPTIONS.extractArtifacts,
-    flattenArtifacts:
-      message.flattenArtifacts ?? DEFAULT_EXPORT_OPTIONS.flattenArtifacts,
-    format: message.format ?? DEFAULT_EXPORT_OPTIONS.format,
-    includeArtifacts:
-      message.includeArtifacts ?? DEFAULT_EXPORT_OPTIONS.includeArtifacts,
-    includeChats: message.includeChats ?? DEFAULT_EXPORT_OPTIONS.includeChats,
-    includeMetadata:
-      message.includeMetadata ?? DEFAULT_EXPORT_OPTIONS.includeMetadata,
-    includeThinking:
-      message.includeThinking ?? DEFAULT_EXPORT_OPTIONS.includeThinking,
-  };
-};
-
-// The pipeline reports partial failures instead of throwing, so a bulk export
-// can succeed for most conversations and still say what it lost.
-const toExportResponse = (
-  result: ExportResult,
-  attempted: number,
-): ExportResponse => {
-  const response: ExportResponse = {
-    count: result.exportedIds.length,
-    filename: result.filename,
-    success: true,
-  };
-  if (result.failedNames.length > 0) {
-    response.warnings =
-      `Exported ${result.exportedIds.length}/${attempted} conversations. ` +
-      `Some failed: ${result.failedNames.join('; ')}`;
-  }
-  return response;
-};
 
 const handleExportConversation = async (
   request: ExportConversationRequest,
@@ -116,11 +61,7 @@ const handleExportAllConversations = async (
   // Capture current models before any model bounce can rewrite them.
   await recordModelSnapshots(conversations);
 
-  const targets: ExportTarget[] = conversations.map((conv) => ({
-    name: conv.name || conv.uuid,
-    updatedAt: conv.updated_at,
-    uuid: conv.uuid,
-  }));
+  const targets = toExportTargets(conversations);
 
   const result = await exportConversations(
     request.orgId,
@@ -185,10 +126,4 @@ const init = (): void => {
 
 init();
 
-export {
-  DEFAULT_EXPORT_OPTIONS,
-  init,
-  resolveOptions,
-  route,
-  toExportResponse,
-};
+export { init, route };

@@ -1,3 +1,10 @@
+// The options page: listener wiring only.
+//
+// Every decision it makes lives in ./settings (DOM-free, spec'd) and every
+// element read goes through ./dom (instanceof-guarded). What is left here is
+// the wiring itself, which no spec can reach because the test environment has
+// no DOM.
+
 import {
   backupExtensionData,
   importBackup,
@@ -15,62 +22,47 @@ import {
   storageSet,
 } from '$platform';
 
-// Capture unhandled errors for diagnostics (sanitized, stored in chrome.storage.local)
+import {
+  eventValue,
+  hideStatus,
+  onChange,
+  onClick,
+  readInputValue,
+  setInputValue,
+  setSelectValue,
+  setText,
+  showStatus,
+} from './dom';
+import {
+  connectionErrorMessage,
+  describeCacheStats,
+  isValidOrgId,
+  resolveModelDisplay,
+} from './settings';
+
+// Capture unhandled errors for diagnostics (sanitized, stored in
+// chrome.storage.local).
 initErrorCapture('options');
 
-const showStatus = (
-  elementId: string,
-  message: string,
-  type: 'error' | 'success',
-): void => {
-  const statusEl = document.getElementById(elementId);
-  if (!statusEl) return;
-  statusEl.textContent = message;
-  statusEl.className = `status ${type}`;
+// ── Organization ID ────────────────────────────────────────────────────────
+
+const loadOrgId = async (): Promise<void> => {
+  const result = await storageGet<{ organizationId?: string }>('sync', [
+    'organizationId',
+  ]);
+  if (!result.organizationId) return;
+  setInputValue('orgId', result.organizationId);
+  showStatus('status', 'Organization ID loaded from saved settings', 'success');
+  setTimeout(() => hideStatus('status'), 2000);
 };
 
-const hideStatus = (elementId: string): void => {
-  const statusEl = document.getElementById(elementId);
-  if (!statusEl) return;
-  statusEl.className = 'status';
-};
-
-// Load saved settings
-document.addEventListener('DOMContentLoaded', () => {
-  storageGet<{ organizationId?: string }>('sync', ['organizationId']).then(
-    (result) => {
-      if (result.organizationId) {
-        const orgIdInput = document.getElementById(
-          'orgId',
-        ) as HTMLInputElement | null;
-        if (orgIdInput) orgIdInput.value = result.organizationId;
-        showStatus(
-          'status',
-          'Organization ID loaded from saved settings',
-          'success',
-        );
-        setTimeout(() => hideStatus('status'), 2000);
-      }
-    },
-  );
-});
-
-// Save settings
-document.getElementById('saveBtn')?.addEventListener('click', () => {
-  const orgIdInput = document.getElementById(
-    'orgId',
-  ) as HTMLInputElement | null;
-  const orgId = orgIdInput?.value.trim() ?? '';
-
+const saveOrgId = async (): Promise<void> => {
+  const orgId = readInputValue('orgId');
   if (!orgId) {
     showStatus('status', 'Please enter an Organization ID', 'error');
     return;
   }
-
-  // Validate UUID format
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(orgId)) {
+  if (!isValidOrgId(orgId)) {
     showStatus(
       'status',
       'Invalid Organization ID format. It should be a UUID like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
@@ -78,41 +70,23 @@ document.getElementById('saveBtn')?.addEventListener('click', () => {
     );
     return;
   }
+  await storageSet('sync', { organizationId: orgId });
+  showStatus('status', 'Settings saved successfully!', 'success');
+};
 
-  storageSet('sync', { organizationId: orgId }).then(() => {
-    showStatus('status', 'Settings saved successfully!', 'success');
-  });
-});
+// ── Connection test ────────────────────────────────────────────────────────
 
-// Test connection
-document.getElementById('testBtn')?.addEventListener('click', async () => {
-  const orgIdInput = document.getElementById(
-    'orgId',
-  ) as HTMLInputElement | null;
-  const orgId = orgIdInput?.value.trim() ?? '';
+/**
+ * Firefox MV3 makes host permissions optional and user-revocable, so the
+ * extension may be installed yet unable to reach claude.ai at all. Chrome
+ * always reports granted, so this is a no-op there.
+ */
+const ensureClaudeAccess = async (): Promise<boolean> => {
+  if (await hasClaudeAccess()) return true;
+  return requestClaudeAccess();
+};
 
-  if (!orgId) {
-    showStatus('testStatus', 'Please save an Organization ID first', 'error');
-    return;
-  }
-
-  showStatus('testStatus', 'Testing connection...', 'success');
-
-  // Firefox MV3 makes host permissions optional and user-revocable, so the
-  // extension may be installed yet unable to reach claude.ai at all.
-  const hasAccess = await hasClaudeAccess();
-  if (!hasAccess) {
-    const granted = await requestClaudeAccess();
-    if (!granted) {
-      showStatus(
-        'testStatus',
-        'Access to claude.ai was not granted. Please allow the permission to test the connection.',
-        'error',
-      );
-      return;
-    }
-  }
-
+const runConnectionTest = async (orgId: string): Promise<void> => {
   try {
     const data = await fetchConversationList(orgId);
     showStatus(
@@ -121,206 +95,216 @@ document.getElementById('testBtn')?.addEventListener('click', async () => {
       'success',
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('401')) {
-      showStatus(
-        'testStatus',
-        'Not authenticated. Please make sure you are logged into claude.ai',
-        'error',
-      );
-    } else if (message.includes('403')) {
-      showStatus(
-        'testStatus',
-        'Access denied. The Organization ID might be incorrect.',
-        'error',
-      );
-    } else {
-      showStatus('testStatus', `Connection error: ${message}`, 'error');
-    }
+    showStatus('testStatus', connectionErrorMessage(error), 'error');
   }
-});
+};
 
-// Backup all extension data to a file (shared logic lives in features/backup)
-document.getElementById('backupBtn')?.addEventListener('click', async () => {
+const testConnection = async (): Promise<void> => {
+  const orgId = readInputValue('orgId');
+  if (!orgId) {
+    showStatus('testStatus', 'Please save an Organization ID first', 'error');
+    return;
+  }
+
+  showStatus('testStatus', 'Testing connection...', 'success');
+
+  if (!(await ensureClaudeAccess())) {
+    showStatus(
+      'testStatus',
+      'Access to claude.ai was not granted. Please allow the permission to test the connection.',
+      'error',
+    );
+    return;
+  }
+
+  await runConnectionTest(orgId);
+};
+
+// ── Backup and restore ─────────────────────────────────────────────────────
+
+const runBackup = async (): Promise<void> => {
   const { message, success } = await backupExtensionData();
   showStatus('backupStatus', message, success ? 'success' : 'error');
-});
+};
 
-// Restore extension data from a backup file. Flow: click → mode-choice modal
-// → file picker → import. The mode is held in pendingImportMode across the
-// async file-picker boundary.
+// The mode is chosen before the OS file picker opens, so it has to survive the
+// async gap between the two. Consumed on use — a stale mode must never be
+// applied to a file picked for a later, cancelled attempt.
 let pendingImportMode: ImportMode | null = null;
 
-document.getElementById('restoreBtn')?.addEventListener('click', async () => {
+const startRestore = async (): Promise<void> => {
   const mode = await showImportModeModal();
   if (mode === null) return; // user cancelled the modal
   pendingImportMode = mode;
   document.getElementById('restoreFile')?.click();
-});
-
-document
-  .getElementById('restoreFile')
-  ?.addEventListener('change', async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const file = target.files?.[0];
-    target.value = ''; // allow re-selecting the same file later
-    const mode = pendingImportMode;
-    pendingImportMode = null; // consume; never reuse a stale mode
-    if (!file || !mode) return;
-    const { message, success } = await importBackup(file, mode);
-    showStatus('backupStatus', message, success ? 'success' : 'error');
-  });
-
-// Date & Time format preferences (displayed in the browse view)
-const loadDateTimeFormatPrefs = (): void => {
-  storageGet<{ dateFormat?: string; timeFormat?: string }>('local', [
-    'dateFormat',
-    'timeFormat',
-  ]).then((result) => {
-    const dateFormatSelect = document.getElementById(
-      'dateFormatSelect',
-    ) as HTMLSelectElement | null;
-    const timeFormatSelect = document.getElementById(
-      'timeFormatSelect',
-    ) as HTMLSelectElement | null;
-    if (dateFormatSelect) dateFormatSelect.value = result.dateFormat || 'mdy';
-    if (timeFormatSelect) timeFormatSelect.value = result.timeFormat || '12h';
-  });
 };
-loadDateTimeFormatPrefs();
 
-document.getElementById('dateFormatSelect')?.addEventListener('change', (e) => {
-  const value = (e.target as HTMLSelectElement).value;
-  storageSet('local', { dateFormat: value }).then(() => {
-    showStatus(
-      'dateTimeStatus',
-      'Date format saved. Reload the browse page to see the change.',
-      'success',
-    );
-  });
-});
+const takePendingImportMode = (): ImportMode | null => {
+  const mode = pendingImportMode;
+  pendingImportMode = null;
+  return mode;
+};
 
-document.getElementById('timeFormatSelect')?.addEventListener('change', (e) => {
-  const value = (e.target as HTMLSelectElement).value;
-  storageSet('local', { timeFormat: value }).then(() => {
-    showStatus(
-      'dateTimeStatus',
-      'Time format saved. Reload the browse page to see the change.',
-      'success',
-    );
-  });
-});
+const finishRestore = async (event: Event): Promise<void> => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const file = target.files?.[0];
+  target.value = ''; // allow re-selecting the same file later
+  const mode = takePendingImportMode();
+  if (!file || !mode) return;
+  const { message, success } = await importBackup(file, mode);
+  showStatus('backupStatus', message, success ? 'success' : 'error');
+};
 
-// Model display preference (browse view's Model column)
-const loadModelDisplayPref = (): void => {
-  storageGet<{ modelDisplay?: string }>('local', ['modelDisplay']).then(
-    (result) => {
-      const value = result.modelDisplay === 'current' ? 'current' : 'original';
-      const radio = document.querySelector<HTMLInputElement>(
-        `input[name="modelDisplay"][value="${value}"]`,
-      );
-      if (radio) radio.checked = true;
-    },
+// ── Display preferences (rendered by the browse page) ──────────────────────
+
+const RELOAD_HINT = 'Reload the browse page to see the change.';
+
+const loadDateTimeFormatPrefs = async (): Promise<void> => {
+  const result = await storageGet<{ dateFormat?: string; timeFormat?: string }>(
+    'local',
+    ['dateFormat', 'timeFormat'],
+  );
+  setSelectValue('dateFormatSelect', result.dateFormat || 'mdy');
+  setSelectValue('timeFormatSelect', result.timeFormat || '12h');
+};
+
+const saveFormatPref = async (
+  key: 'dateFormat' | 'timeFormat',
+  label: string,
+  event: Event,
+): Promise<void> => {
+  const value = eventValue(event);
+  if (value === undefined) return;
+  await storageSet('local', { [key]: value });
+  showStatus(
+    'dateTimeStatus',
+    `${label} format saved. ${RELOAD_HINT}`,
+    'success',
   );
 };
-loadModelDisplayPref();
 
-document
-  .querySelectorAll<HTMLInputElement>('input[name="modelDisplay"]')
-  .forEach((radio) => {
-    radio.addEventListener('change', (e) => {
-      const value = (e.target as HTMLInputElement).value;
-      storageSet('local', { modelDisplay: value }).then(() => {
-        showStatus(
-          'modelDisplayStatus',
-          'Model display preference saved. Reload the browse page to see the change.',
-          'success',
-        );
-      });
-    });
-  });
+const loadModelDisplayPref = async (): Promise<void> => {
+  const result = await storageGet<{ modelDisplay?: string }>('local', [
+    'modelDisplay',
+  ]);
+  const value = resolveModelDisplay(result.modelDisplay);
+  const radio = document.querySelector<HTMLInputElement>(
+    `input[name="modelDisplay"][value="${value}"]`,
+  );
+  if (radio) radio.checked = true;
+};
 
-// Contact & Diagnostics
-document.getElementById('emailDevLink')?.addEventListener('click', (e) => {
-  e.preventDefault();
-  const version = getManifestVersion();
+const saveModelDisplayPref = async (event: Event): Promise<void> => {
+  const value = eventValue(event);
+  if (value === undefined) return;
+  await storageSet('local', { modelDisplay: value });
+  showStatus(
+    'modelDisplayStatus',
+    `Model display preference saved. ${RELOAD_HINT}`,
+    'success',
+  );
+};
+
+// ── Contact and diagnostics ────────────────────────────────────────────────
+
+const openBugReportEmail = (event: Event): void => {
+  event.preventDefault();
   const subject = encodeURIComponent(
-    `Claude Exporter Bug Report — v${version}`,
+    `Claude Exporter Bug Report — v${getManifestVersion()}`,
   );
   const body = encodeURIComponent(
     'Describe the issue here. If this is a bug, please attach a diagnostics file generated from the Options page.\n\n',
   );
   window.location.href = `mailto:agoramachina@gmail.com?subject=${subject}&body=${body}`;
-});
+};
 
-document
-  .getElementById('generateDiagnosticsLink')
-  ?.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const { message, success } = await generateDiagnostics();
-    showStatus('contactStatus', message, success ? 'success' : 'error');
-  });
+const runDiagnostics = async (event: Event): Promise<void> => {
+  event.preventDefault();
+  const { message, success } = await generateDiagnostics();
+  showStatus('contactStatus', message, success ? 'success' : 'error');
+};
 
-// Chat Cache
+// ── Chat Cache ─────────────────────────────────────────────────────────────
 //
 // The options page is extension-origin, the same as the background worker, so
 // it reads the cache directly rather than relaying through it.
 
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${Math.round(bytes / (1024 * 1024))} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-};
-
-const refreshCacheStats = async (): Promise<void> => {
-  const el = document.getElementById('cacheStats');
-  if (!el) return;
-
+const readCacheDescription = async (): Promise<string> => {
   try {
-    const stats = await cacheStats();
-    const parts = [
-      `${stats.entries} conversation${stats.entries === 1 ? '' : 's'} cached`,
-    ];
-    // Origin-wide, so it covers settings and export history too. Saying so
-    // beats reporting a number that will not match the entry count.
-    if (stats.usageBytes !== null) {
-      parts.push(
-        `${formatBytes(stats.usageBytes)} of local storage used in total`,
-      );
-    }
-    if (stats.quotaExceeded) {
-      parts.push('storage is full — new conversations are not being cached');
-    }
-    el.textContent = parts.join(' · ');
-  } catch {
-    el.textContent = 'Cache unavailable.';
+    return describeCacheStats(await cacheStats());
+  } catch (error) {
+    console.warn(
+      new Error('Could not read the Chat Cache statistics', { cause: error }),
+    );
+    return 'Cache unavailable.';
   }
 };
 
+const refreshCacheStats = async (): Promise<void> => {
+  setText('cacheStats', await readCacheDescription());
+};
+
+const emptyCache = async (): Promise<void> => {
+  hideStatus('cacheStatus');
+  try {
+    await clearCache();
+  } catch (error) {
+    showStatus(
+      'cacheStatus',
+      `Could not clear the cache: ${error instanceof Error ? error.message : String(error)}`,
+      'error',
+    );
+    return;
+  }
+  await refreshCacheStats();
+  showStatus(
+    'cacheStatus',
+    'Chat Cache cleared. The next export will refetch.',
+    'success',
+  );
+};
+
+// ── Wiring ─────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
+  void loadOrgId();
   void refreshCacheStats();
 });
 
-document.getElementById('clearCacheBtn')?.addEventListener('click', () => {
-  hideStatus('cacheStatus');
-  clearCache()
-    .then(async () => {
-      await refreshCacheStats();
-      showStatus(
-        'cacheStatus',
-        'Chat Cache cleared. The next export will refetch.',
-        'success',
-      );
-    })
-    .catch((error: unknown) => {
-      showStatus(
-        'cacheStatus',
-        `Could not clear the cache: ${error instanceof Error ? error.message : String(error)}`,
-        'error',
-      );
-    });
-});
+onClick('saveBtn', () => void saveOrgId());
+onClick('testBtn', () => void testConnection());
+onClick('backupBtn', () => void runBackup());
+onClick('restoreBtn', () => void startRestore());
+onChange('restoreFile', (event) => void finishRestore(event));
+onClick('clearCacheBtn', () => void emptyCache());
+
+onChange(
+  'dateFormatSelect',
+  (event) => void saveFormatPref('dateFormat', 'Date', event),
+);
+onChange(
+  'timeFormatSelect',
+  (event) => void saveFormatPref('timeFormat', 'Time', event),
+);
+
+document
+  .getElementById('emailDevLink')
+  ?.addEventListener('click', openBugReportEmail);
+document
+  .getElementById('generateDiagnosticsLink')
+  ?.addEventListener('click', (event) => void runDiagnostics(event));
+
+document
+  .querySelectorAll<HTMLInputElement>('input[name="modelDisplay"]')
+  .forEach((radio) => {
+    radio.addEventListener(
+      'change',
+      (event) => void saveModelDisplayPref(event),
+    );
+  });
+
+void loadDateTimeFormatPrefs();
+void loadModelDisplayPref();
 
 export {};

@@ -280,6 +280,144 @@ describe('tracking', () => {
       storageSetSpy.mockRestore();
     });
 
+    it('reads but never writes for an empty array', async () => {
+      const storageGetSpy = vi.spyOn(chrome.storage.local, 'get');
+      const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');
+
+      await recordModelSnapshots([]);
+
+      // An empty array is a real (if trivial) list, unlike a non-array: it
+      // passes the Array.isArray guard and reaches the read.
+      expect(storageGetSpy).toHaveBeenCalled();
+      expect(storageSetSpy).not.toHaveBeenCalled();
+      storageGetSpy.mockRestore();
+      storageSetSpy.mockRestore();
+    });
+
+    it('writes once for a batch mixing an unchanged and a bounced conversation', async () => {
+      await storageSet('local', {
+        modelSnapshots: {
+          c1: {
+            current: 'claude-old',
+            currentAt: '2026-01-01T00:00:00.000Z',
+            firstSeen: 'claude-old',
+            firstSeenAt: '2026-01-01T00:00:00.000Z',
+            history: [{ at: '2026-01-01T00:00:00.000Z', model: 'claude-old' }],
+          },
+          c2: {
+            current: 'claude-old',
+            currentAt: '2026-01-01T00:00:00.000Z',
+            firstSeen: 'claude-old',
+            firstSeenAt: '2026-01-01T00:00:00.000Z',
+            history: [{ at: '2026-01-01T00:00:00.000Z', model: 'claude-old' }],
+          },
+        },
+      });
+      const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');
+
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-old'), // unchanged
+        conv('c2', '2026-01-02T00:00:00.000Z', 'claude-new'), // bounced
+      ]);
+
+      expect(storageSetSpy).toHaveBeenCalledTimes(1);
+      const { modelSnapshots } = await storageGet<{
+        modelSnapshots: Record<
+          string,
+          { current: string; history: Array<{ model: string }> }
+        >;
+      }>('local', ['modelSnapshots']);
+      expect(modelSnapshots.c1.history).toHaveLength(1);
+      expect(modelSnapshots.c2.current).toBe('claude-new');
+      expect(modelSnapshots.c2.history).toHaveLength(2);
+      storageSetSpy.mockRestore();
+    });
+
+    it('never touches the Export Record store — model snapshots are a separate concept', async () => {
+      await storageSet('local', {
+        exportTimestamps: { c1: '2026-01-01T00:00:00.000Z' },
+      });
+
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus'),
+      ]);
+
+      // Holding the bytes of a model snapshot says nothing about whether the
+      // user got a file: the Export Record is untouched, and in particular the
+      // conversation is still Stale.
+      const book = await loadExportRecords();
+      expect(book.status(conv('c1', '2026-01-02T00:00:00.000Z'))).toBe('stale');
+      const { exportTimestamps } = await storageGet<{
+        exportTimestamps: Record<string, string>;
+      }>('local', ['exportTimestamps']);
+      expect(exportTimestamps).toEqual({ c1: '2026-01-01T00:00:00.000Z' });
+    });
+
+    it('a failed write rejects the caller and leaves the stored snapshots as they were', async () => {
+      await storageSet('local', {
+        modelSnapshots: {
+          c1: {
+            current: 'claude-old',
+            currentAt: '2026-01-01T00:00:00.000Z',
+            firstSeen: 'claude-old',
+            firstSeenAt: '2026-01-01T00:00:00.000Z',
+            history: [{ at: '2026-01-01T00:00:00.000Z', model: 'claude-old' }],
+          },
+        },
+      });
+      const storageSetSpy = vi
+        .spyOn(chrome.storage.local, 'set')
+        .mockRejectedValueOnce(new Error('quota exceeded'));
+
+      await expect(
+        recordModelSnapshots([
+          conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new'),
+        ]),
+      ).rejects.toThrow('quota exceeded');
+
+      storageSetSpy.mockRestore();
+      const { modelSnapshots } = await storageGet<{
+        modelSnapshots: Record<string, { current: string }>;
+      }>('local', ['modelSnapshots']);
+      expect(modelSnapshots.c1.current).toBe('claude-old');
+    });
+
+    it('a failed write does not poison the queue — the next call still writes', async () => {
+      const storageSetSpy = vi
+        .spyOn(chrome.storage.local, 'set')
+        .mockRejectedValueOnce(new Error('quota exceeded'));
+
+      await expect(
+        recordModelSnapshots([
+          conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new'),
+        ]),
+      ).rejects.toThrow('quota exceeded');
+      storageSetSpy.mockRestore();
+
+      // The snapshot lives in storage, not in a module-level cache, so the
+      // retry re-derives it from the same input and succeeds.
+      await recordModelSnapshots([
+        conv('c1', '2026-01-02T00:00:00.000Z', 'claude-new'),
+      ]);
+
+      const { modelSnapshots } = await storageGet<{
+        modelSnapshots: Record<string, { current: string; firstSeen: string }>;
+      }>('local', ['modelSnapshots']);
+      expect(modelSnapshots.c1.current).toBe('claude-new');
+      expect(modelSnapshots.c1.firstSeen).toBe('claude-new');
+    });
+
+    it('skips a conversation with an empty uuid', async () => {
+      const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');
+
+      await recordModelSnapshots([
+        conv('', '2026-01-02T00:00:00.000Z', 'claude-opus'),
+      ]);
+
+      expect(storageSetSpy).not.toHaveBeenCalled();
+      storageSetSpy.mockRestore();
+    });
+
     it('is a no-op for non-array input', async () => {
       const storageGetSpy = vi.spyOn(chrome.storage.local, 'get');
       const storageSetSpy = vi.spyOn(chrome.storage.local, 'set');

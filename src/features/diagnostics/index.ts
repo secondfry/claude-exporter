@@ -68,62 +68,90 @@ interface ErrorLogStorage extends Record<string, unknown> {
   errorLog?: unknown;
 }
 
+/** Appends one entry to the ring buffer, trimming the oldest past the cap. */
+const appendErrorLogEntry = async (entry: ErrorLogEntry): Promise<void> => {
+  const stored = await storageGet<ErrorLogStorage>('local', ['errorLog']);
+  const log = readErrorLog(stored.errorLog);
+  log.push(entry);
+  if (log.length > CE_ERROR_LOG_MAX) {
+    log.splice(0, log.length - CE_ERROR_LOG_MAX);
+  }
+  await storageSet('local', { errorLog: log });
+};
+
+const toErrorEntry = (
+  event: ErrorEvent,
+  context: string | undefined,
+): ErrorLogEntry => {
+  return {
+    col: event.colno || null,
+    context,
+    level: 'error',
+    line: event.lineno || null,
+    msg: sanitizeForDiagnostics(String(event.message || '')),
+    source: sanitizeOptional(event.filename),
+    stack: sanitizeOptional(
+      event.error instanceof Error ? event.error.stack : null,
+    ),
+    ts: new Date().toISOString(),
+  };
+};
+
+const rejectionMessage = (reason: unknown): string => {
+  if (reason instanceof Error) return reason.message;
+  if (reason === undefined) return '(no reason)';
+  return String(reason);
+};
+
+const toRejectionEntry = (
+  event: PromiseRejectionEvent,
+  context: string | undefined,
+): ErrorLogEntry => {
+  const reason: unknown = event.reason;
+  return {
+    context,
+    level: 'unhandledrejection',
+    msg: sanitizeForDiagnostics(rejectionMessage(reason)),
+    stack: sanitizeOptional(reason instanceof Error ? reason.stack : null),
+    ts: new Date().toISOString(),
+  };
+};
+
 const initErrorCapture = (context?: string): void => {
-  // Re-entry guard: if our own push() throws, don't loop into the listener.
+  // Not an incidental accumulator — this is re-entrancy protection, and it has
+  // to be mutable closure state because the window it protects spans an async
+  // storage round-trip. If appending throws, the throw would surface as an
+  // 'error' event or an unhandled rejection, re-entering the very listener
+  // that raised it and looping without bound. Set before the write starts,
+  // cleared once it settles either way.
   let suppressed = false;
 
-  const push = (entry: ErrorLogEntry) => {
+  const push = (entry: ErrorLogEntry): void => {
     if (suppressed) return;
     suppressed = true;
-    void (async () => {
-      try {
-        const stored = await storageGet<ErrorLogStorage>('local', ['errorLog']);
-        const log = readErrorLog(stored.errorLog);
-        log.push(entry);
-        if (log.length > CE_ERROR_LOG_MAX) {
-          log.splice(0, log.length - CE_ERROR_LOG_MAX);
-        }
-        await storageSet('local', { errorLog: log });
-      } catch {
-        // Diagnostics must never be the reason something fails.
-      } finally {
+    void appendErrorLogEntry(entry)
+      .catch(() => {
+        // Swallowed on purpose: diagnostics must never be the reason something
+        // fails. It cannot report its own failure either — rethrowing becomes
+        // an unhandled rejection that fires the listener below, and logging it
+        // would put noise into the console of the very page we are observing,
+        // in the one situation (storage unavailable) where nothing could be
+        // persisted to explain it anyway. So no `cause` is chained here: there
+        // is nowhere for it to go.
+      })
+      .finally(() => {
         suppressed = false;
-      }
-    })();
+      });
   };
 
   globalThis.addEventListener('error', (event: ErrorEvent) => {
-    push({
-      col: event.colno || null,
-      context,
-      level: 'error',
-      line: event.lineno || null,
-      msg: sanitizeForDiagnostics(String(event.message || '')),
-      source: sanitizeOptional(event.filename),
-      stack: sanitizeOptional(
-        event.error instanceof Error ? event.error.stack : null,
-      ),
-      ts: new Date().toISOString(),
-    });
+    push(toErrorEntry(event, context));
   });
 
   globalThis.addEventListener(
     'unhandledrejection',
     (event: PromiseRejectionEvent) => {
-      const reason: unknown = event.reason;
-      const msg =
-        reason instanceof Error
-          ? reason.message
-          : reason !== undefined
-            ? String(reason)
-            : '(no reason)';
-      push({
-        context,
-        level: 'unhandledrejection',
-        msg: sanitizeForDiagnostics(msg),
-        stack: sanitizeOptional(reason instanceof Error ? reason.stack : null),
-        ts: new Date().toISOString(),
-      });
+      push(toRejectionEntry(event, context));
     },
   );
 };

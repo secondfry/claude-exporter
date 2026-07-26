@@ -125,15 +125,16 @@ const mergeStorageData = (
   return result;
 };
 
-// Show a modal letting the user choose merge vs replace BEFORE the OS file
-// picker opens. Resolves with the chosen mode, or null on Cancel / Esc /
-// overlay click. The caller opens the file picker on a non-null mode.
-const showImportModeModal = (): Promise<ImportMode | null> => {
-  return new Promise((resolve) => {
-    if (!document.getElementById('claude-exporter-modal-styles')) {
-      const style = document.createElement('style');
-      style.id = 'claude-exporter-modal-styles';
-      style.textContent = `
+// ── The import-mode modal ──────────────────────────────────────────────────
+//
+// None of this is reachable from a spec: the test environment is `node` with
+// no DOM, deliberately (adding jsdom would let untested DOM code grow). So it
+// is split by job instead — styles, markup, the radio read, teardown, and the
+// dismissal bindings — because "one arrow does one thing" is the only
+// legibility this code gets.
+
+const MODAL_STYLE_ID = 'claude-exporter-modal-styles';
+const MODAL_STYLES = `
       .ce-modal-overlay {
         position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
         display: flex; align-items: center; justify-content: center;
@@ -193,16 +194,18 @@ const showImportModeModal = (): Promise<ImportMode | null> => {
       }
       .ce-modal-import:hover { background: var(--primary-hover, #4a35ba); }
     `;
-      document.head.appendChild(style);
-    }
 
-    // Remove any stale modal before showing a new one
-    const stale = document.querySelector('.ce-modal-overlay');
-    if (stale) stale.remove();
+// Injected once per page. The options page owns its own stylesheet, but this
+// modal is also reachable from contexts that do not load it.
+const ensureModalStyles = (): void => {
+  if (document.getElementById(MODAL_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = MODAL_STYLE_ID;
+  style.textContent = MODAL_STYLES;
+  document.head.appendChild(style);
+};
 
-    const overlay = document.createElement('div');
-    overlay.className = 'ce-modal-overlay';
-    overlay.innerHTML = `
+const MODAL_MARKUP = `
     <div class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-modal-title">
       <h2 id="ce-modal-title">Import Backup</h2>
       <div class="ce-modal-info">
@@ -225,40 +228,82 @@ const showImportModeModal = (): Promise<ImportMode | null> => {
     </div>
   `;
 
-    document.body.appendChild(overlay);
+/** Build the overlay and put it on the page, replacing any stale one. */
+const openModalOverlay = (): HTMLElement => {
+  document.querySelector('.ce-modal-overlay')?.remove();
 
-    const selectedMode = (): ImportMode | null => {
-      const checked = overlay.querySelector(
-        'input[name="ce-import-mode"]:checked',
-      );
-      if (!(checked instanceof HTMLInputElement)) return null;
-      return isImportMode(checked.value) ? checked.value : null;
-    };
+  const overlay = document.createElement('div');
+  overlay.className = 'ce-modal-overlay';
+  overlay.innerHTML = MODAL_MARKUP;
+  document.body.appendChild(overlay);
+  return overlay;
+};
 
-    const cleanup = (mode: ImportMode | null) => {
-      overlay.remove();
-      document.removeEventListener('keydown', onKey);
-      resolve(mode);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cleanup(null);
-      else if (e.key === 'Enter') cleanup(selectedMode());
-    };
-    document.addEventListener('keydown', onKey);
+/**
+ * Which mode the radios are currently on.
+ *
+ * Validated, not asserted: the value comes out of the markup above as a plain
+ * string, and a typo there would otherwise reach storageSet as a live mode.
+ */
+const selectedMode = (overlay: HTMLElement): ImportMode | null => {
+  const checked = overlay.querySelector('input[name="ce-import-mode"]:checked');
+  if (!(checked instanceof HTMLInputElement)) return null;
+  return isImportMode(checked.value) ? checked.value : null;
+};
 
-    overlay
-      .querySelector('.ce-modal-cancel')
-      ?.addEventListener('click', () => cleanup(null));
-    overlay
-      .querySelector('.ce-modal-import')
-      ?.addEventListener('click', () => cleanup(selectedMode()));
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) cleanup(null);
-    });
+/** Keyboard users must be able to act without reaching for the mouse. */
+const focusDefaultOption = (overlay: HTMLElement): void => {
+  const firstRadio = overlay.querySelector('input[name="ce-import-mode"]');
+  if (firstRadio instanceof HTMLInputElement) firstRadio.focus();
+};
 
-    // Focus the default radio so keyboard users can act immediately
-    const firstRadio = overlay.querySelector('input[name="ce-import-mode"]');
-    if (firstRadio instanceof HTMLInputElement) firstRadio.focus();
+/**
+ * Wire every way out of the modal to one `close` callback.
+ *
+ * Confirming (the button, or Enter) closes with the selected mode; every other
+ * exit — Cancel, Escape, a click on the backdrop — closes with null. Routing
+ * them all through one callback is what guarantees the keydown listener is
+ * removed exactly once, whichever way the user leaves.
+ */
+const bindModalDismissal = (
+  overlay: HTMLElement,
+  settle: (mode: ImportMode | null) => void,
+): void => {
+  // `close` and `onKey` reference each other. Both are only ever called from
+  // an event handler, long after this function has returned, so neither is in
+  // its temporal dead zone by the time it runs.
+  const close = (mode: ImportMode | null): void => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+    settle(mode);
+  };
+
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') close(null);
+    else if (event.key === 'Enter') close(selectedMode(overlay));
+  };
+  document.addEventListener('keydown', onKey);
+
+  overlay
+    .querySelector('.ce-modal-cancel')
+    ?.addEventListener('click', () => close(null));
+  overlay
+    .querySelector('.ce-modal-import')
+    ?.addEventListener('click', () => close(selectedMode(overlay)));
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) close(null);
+  });
+};
+
+// Show a modal letting the user choose merge vs replace BEFORE the OS file
+// picker opens. Resolves with the chosen mode, or null on Cancel / Esc /
+// overlay click. The caller opens the file picker on a non-null mode.
+const showImportModeModal = (): Promise<ImportMode | null> => {
+  return new Promise((resolve) => {
+    ensureModalStyles();
+    const overlay = openModalOverlay();
+    bindModalDismissal(overlay, resolve);
+    focusDefaultOption(overlay);
   });
 };
 

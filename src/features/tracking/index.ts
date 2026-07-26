@@ -139,11 +139,8 @@ const makeExportRecordBook = (records: ExportRecords): ExportRecordBook => {
       return statusOf(conv, records) !== 'current';
     },
     needsExportCount(convs) {
-      let count = 0;
-      for (const conv of convs) {
-        if (statusOf(conv, records) !== 'current') count += 1;
-      }
-      return count;
+      return convs.filter((conv) => statusOf(conv, records) !== 'current')
+        .length;
     },
     get size() {
       return Object.keys(records).length;
@@ -233,9 +230,54 @@ const emptyModelDisplay = (preference: ModelPreference): ModelDisplayBook => {
   return makeModelDisplayBook({}, preference);
 };
 
+// The snapshot a Conversation should have, or null when nothing about it
+// changed. Returning null rather than an equal snapshot is what lets the
+// caller decide there is no write to make at all.
+const nextSnapshot = (
+  existing: ModelSnapshot | undefined,
+  model: string,
+  now: string,
+): ModelSnapshot | null => {
+  if (!existing) {
+    return {
+      current: model,
+      currentAt: now,
+      firstSeen: model,
+      firstSeenAt: now,
+      history: [{ at: now, model }],
+    };
+  }
+  if (existing.current === model) return null;
+  // A bounce: `firstSeen` is never rewritten, and history only ever grows.
+  return {
+    ...existing,
+    current: model,
+    currentAt: now,
+    history: [...(existing.history || []), { at: now, model }],
+  };
+};
+
+const collectSnapshotChanges = (
+  conversations: readonly ConversationSummary[],
+  snapshots: ModelSnapshots,
+  now: string,
+): Array<[string, ModelSnapshot]> => {
+  const changes: Array<[string, ModelSnapshot]> = [];
+  for (const conv of conversations) {
+    const model = conv?.model;
+    const id = conv?.uuid;
+    if (!model || !id) continue; // skip null-model chats — don't snapshot a guess
+
+    const next = nextSnapshot(snapshots[id], model, now);
+    if (next) changes.push([id, next]);
+  }
+  return changes;
+};
+
 // Snapshot each conversation's current model so it survives a model bounce
 // (e.g. when a model retires and Claude silently moves old chats onto a new
-// one). Only the raw API model is recorded — never an inferred guess.
+// one). Only the raw API model is recorded — never an inferred guess. This is
+// not an Export Record: it says nothing about whether the user got a file.
 const recordModelSnapshots = async (
   conversations: ConversationSummary[],
 ): Promise<void> => {
@@ -243,36 +285,15 @@ const recordModelSnapshots = async (
     if (!Array.isArray(conversations)) return;
 
     const snapshots = await readModelSnapshots();
-    const now = new Date().toISOString();
-    let changed = false;
+    const changes = collectSnapshotChanges(
+      conversations,
+      snapshots,
+      new Date().toISOString(),
+    );
+    if (changes.length === 0) return;
 
-    for (const conv of conversations) {
-      const model = conv && conv.model;
-      const id = conv && conv.uuid;
-      if (!model || !id) continue; // skip null-model chats — don't snapshot a guess
-
-      const existing = snapshots[id];
-      if (!existing) {
-        snapshots[id] = {
-          current: model,
-          currentAt: now,
-          firstSeen: model,
-          firstSeenAt: now,
-          history: [{ at: now, model }],
-        };
-        changed = true;
-      } else if (existing.current !== model) {
-        existing.current = model;
-        existing.currentAt = now;
-        existing.history = existing.history || [];
-        existing.history.push({ at: now, model });
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      await storageSet('local', { modelSnapshots: snapshots });
-    }
+    for (const [id, snapshot] of changes) snapshots[id] = snapshot;
+    await storageSet('local', { modelSnapshots: snapshots });
   });
 };
 

@@ -96,10 +96,16 @@ const createConversationList = (): ConversationList => {
   let projectsMap: Record<string, string> = {};
   let exportRecords: ExportRecordBook = emptyExportRecords();
   let models: ModelResolver = emptyModelResolver();
+  // Lower-cased once at setSearch time rather than per row per keystroke.
+  // Like statusFilter and sortStack this is view-model state, not an
+  // accumulator: it lives exactly as long as the list instance does.
   let search = '';
   let statusFilter: StatusFilter = 'all';
   let sortStack: SortCriterion[] = [];
   const selectedUuids = new Set<string>();
+  // The shift-click anchor. Genuinely stateful — a range needs the previous
+  // click to define it — and deliberately cleared whenever the View is
+  // recomputed, because the index it holds is an index into that View.
   let lastCheckedIndex: number | null = null;
 
   const sortValue = (
@@ -120,66 +126,110 @@ const createConversationList = (): ConversationList => {
     }
   };
 
+  // Compares one criterion's values. An unparseable date yields NaN, which is
+  // neither `>` nor `<`, so the pair reads as equal and Array.sort's stability
+  // preserves input order instead of throwing the row to an arbitrary end.
+  const compareValues = (
+    aVal: number | string,
+    bVal: number | string,
+  ): number => {
+    if (aVal > bVal) return 1;
+    if (aVal < bVal) return -1;
+    return 0;
+  };
+
+  // Each criterion carries its own direction; the first that separates the
+  // pair wins, so later entries in the stack are pure tie-breakers.
+  const compareBySortStack = (
+    a: ConversationSummary,
+    b: ConversationSummary,
+  ): number => {
+    for (const { direction, field } of sortStack) {
+      const comparison = compareValues(sortValue(a, field), sortValue(b, field));
+      if (comparison === 0) continue;
+      return direction === 'asc' ? comparison : -comparison;
+    }
+    return 0;
+  };
+
   const sortView = (): void => {
     // If sortStack is empty, fall back to the default sort
     if (sortStack.length === 0) {
       sortStack = [{ ...DEFAULT_SORT }];
     }
 
-    viewConversations.sort((a, b) => {
-      // Try each sort criterion in order until we find a difference
-      for (const { direction, field } of sortStack) {
-        const aVal = sortValue(a, field);
-        const bVal = sortValue(b, field);
+    viewConversations.sort(compareBySortStack);
+  };
 
-        let comparison = 0;
-        if (aVal > bVal) comparison = 1;
-        else if (aVal < bVal) comparison = -1;
+  /** Search scope in every mode but 'projects': the name and the summary. */
+  const matchesSearch = (conv: ConversationSummary): boolean => {
+    if (!search) return true;
+    if (conv.name.toLowerCase().includes(search)) return true;
+    const summary = conv.summary;
+    return (
+      typeof summary === 'string' && summary.toLowerCase().includes(search)
+    );
+  };
 
-        if (comparison !== 0) {
-          return direction === 'asc' ? comparison : -comparison;
-        }
-      }
-      return 0;
-    });
+  // Search scope in 'projects' mode. The '-' sentinel for "no project" is
+  // excluded explicitly, so it can never be matched even by searching for it.
+  const matchesProjectSearch = (conv: ConversationSummary): boolean => {
+    if (!search) return true;
+    const projectName = getProjectName(conv, projectsMap);
+    return projectName !== '-' && projectName.toLowerCase().includes(search);
+  };
+
+  // The three-way status filter. 'exported' means "has an Export Record", so a
+  // Stale Conversation satisfies both it and 'stale' — the cases deliberately
+  // overlap. No `default`: a new StatusFilter must answer here explicitly.
+  const matchesStatus = (conv: ConversationSummary): boolean => {
+    switch (statusFilter) {
+      case 'all':
+      case 'projects':
+        return true;
+      case 'exported':
+        return exportRecords.status(conv) !== 'never';
+      case 'never':
+        return exportRecords.status(conv) === 'never';
+      case 'pending':
+        return exportRecords.needsExport(conv);
+      case 'stale':
+        return exportRecords.status(conv) === 'stale';
+    }
+  };
+
+  // 'projects' mode replaces both halves: the search scope becomes the project
+  // name, and status filters do not apply.
+  const matchesFilters = (conv: ConversationSummary): boolean => {
+    if (statusFilter === 'projects') return matchesProjectSearch(conv);
+    return matchesSearch(conv) && matchesStatus(conv);
   };
 
   const recompute = (): void => {
-    viewConversations = allConversations.filter((conv) => {
-      // 'projects' mode: search scope becomes the project name, status filters do not apply
-      if (statusFilter === 'projects') {
-        if (!search) return true;
-        const projectName = getProjectName(conv, projectsMap);
-        return (
-          projectName !== '-' && projectName.toLowerCase().includes(search)
-        );
-      }
-
-      const summary =
-        typeof conv.summary === 'string' ? conv.summary : undefined;
-      const matchesSearch =
-        !search ||
-        conv.name.toLowerCase().includes(search) ||
-        (!!summary && summary.toLowerCase().includes(search));
-
-      let matchesStatus = true;
-      if (statusFilter === 'pending') {
-        matchesStatus = exportRecords.needsExport(conv);
-      } else if (statusFilter === 'never') {
-        matchesStatus = exportRecords.status(conv) === 'never';
-      } else if (statusFilter === 'stale') {
-        matchesStatus = exportRecords.status(conv) === 'stale';
-      } else if (statusFilter === 'exported') {
-        matchesStatus = exportRecords.status(conv) !== 'never';
-      }
-
-      return matchesSearch && matchesStatus;
-    });
+    viewConversations = allConversations.filter(matchesFilters);
 
     sortView();
 
     // Reset last checked index when the view changes.
     lastCheckedIndex = null;
+  };
+
+  const toggleOne = (uuid: string): void => {
+    if (selectedUuids.has(uuid)) {
+      selectedUuids.delete(uuid);
+      return;
+    }
+    selectedUuids.add(uuid);
+  };
+
+  /** Applies one resulting state to a contiguous run of View rows. */
+  const setRange = (start: number, end: number, checked: boolean): void => {
+    for (let i = start; i <= end; i++) {
+      const conv = viewConversations[i];
+      if (!conv) continue;
+      if (checked) selectedUuids.add(conv.uuid);
+      else selectedUuids.delete(conv.uuid);
+    }
   };
 
   return {
@@ -193,27 +243,16 @@ const createConversationList = (): ConversationList => {
     },
     check(uuid, index, shiftHeld) {
       if (shiftHeld && lastCheckedIndex !== null) {
-        const start = Math.min(lastCheckedIndex, index);
-        const end = Math.max(lastCheckedIndex, index);
         // Range selection follows the *target* checkbox's resulting state:
         // if it ends up checked, the whole range is selected; otherwise the
         // whole range is cleared.
-        const isChecking = !selectedUuids.has(uuid);
-        for (let i = start; i <= end; i++) {
-          const conv = viewConversations[i];
-          if (!conv) continue;
-          if (isChecking) {
-            selectedUuids.add(conv.uuid);
-          } else {
-            selectedUuids.delete(conv.uuid);
-          }
-        }
+        setRange(
+          Math.min(lastCheckedIndex, index),
+          Math.max(lastCheckedIndex, index),
+          !selectedUuids.has(uuid),
+        );
       } else {
-        if (selectedUuids.has(uuid)) {
-          selectedUuids.delete(uuid);
-        } else {
-          selectedUuids.add(uuid);
-        }
+        toggleOne(uuid);
       }
 
       lastCheckedIndex = index;

@@ -1,43 +1,37 @@
 // Browse page entrypoint — UI wiring only.
 //
-// Every piece of business logic here lives in features/: the export pipeline
+// Every piece of business logic lives elsewhere: the export pipeline
 // (features/export), Export Records and model snapshots (features/tracking),
 // claude.ai HTTP (features/conversation/api), filtering/sorting/Selection
-// (features/conversation-list), backup (features/backup). This file owns DOM
-// helpers, theme, date/time preferences, page lifecycle, data loading, TABLE
-// RENDERING, the progress modal, export orchestration, toasts and event
-// wiring — nothing else.
+// (features/conversation-list), backup (features/backup). The page's own
+// decisions live in this directory's siblings — the table's markup
+// (./tableMarkup), what the user is told about an Export (./exportOutcome),
+// which Conversations an Export covers (./exportSelection), the option form
+// (./exportOptions), the organization ID (./orgId), the theme (./theme) and
+// date/time preferences (./dateTimePrefs). Each of those is reachable by a
+// spec; this file is not, so what is left here is DOM writes and
+// addEventListener calls.
 
 import {
   backupExtensionData,
   importBackup,
   showImportModeModal,
 } from '$features/backup';
-import type { ImportMode } from '$features/backup';
 import { localCache } from '$features/cache';
 import { createConversationList } from '$features/conversation-list';
-import type { SortField, StatusFilter } from '$features/conversation-list';
 import {
-  detectOrgId,
   fetchConversationList,
   fetchProjects,
 } from '$features/conversation/api';
-import type { Project } from '$features/conversation/api';
-import type { ConversationSummary } from '$features/conversation/types';
 import { initErrorCapture } from '$features/diagnostics';
 import { exportConversations } from '$features/export/pipeline';
 import type {
-  ArtifactFormat,
-  ExportFormat,
   ExportOptions,
   ExportProgress,
+  ExportResult,
   ExportTarget,
 } from '$features/export/types';
-import {
-  formatModelName,
-  getModelBadgeClass,
-  inferModel,
-} from '$features/models';
+import { inferModel } from '$features/models';
 import {
   clearExportRecords,
   loadExportRecords,
@@ -50,429 +44,148 @@ import {
   getExtensionUrl,
   hasClaudeAccess,
   requestClaudeAccess,
-  storageGet,
-  storageSet,
 } from '$platform';
 
+import type { DateTimePrefs } from './dateTimePrefs';
+import { loadDateTimePrefs, loadModelPreference } from './dateTimePrefs';
+import {
+  getButton,
+  getElement,
+  getInput,
+  requireButton,
+  requireElement,
+  requireInput,
+} from './dom';
+import {
+  CHAT_DEPENDENT_IDS,
+  dependentOptionState,
+  readExportOptions,
+} from './exportOptions';
+import type { Toast } from './exportOutcome';
+import {
+  bulkExportToasts,
+  progressDisplay,
+  singleExportToasts,
+} from './exportOutcome';
+import { exportTargets, rowExportTarget } from './exportSelection';
+import { getOrgId } from './orgId';
+import { buildTableModel, renderTable } from './tableMarkup';
+import { currentTheme, initTheme, themeLabel, toggleTheme } from './theme';
+import { asSortField, asStatusFilter } from './viewControls';
+
 // ---------------------------------------------------------------------------
-// DOM helpers
+// Page-lifetime state
 // ---------------------------------------------------------------------------
 
-const el = <T extends HTMLElement>(id: string): T | null => {
-  return document.getElementById(id) as T | null;
-};
+// The list is the single source of truth for Conversations, Export Records
+// and models — the render path reads through it (list.needsExport,
+// list.display) rather than keeping a second, independently-updated copy that
+// sorting/filtering and rendering could silently disagree on.
+const list = createConversationList();
 
-/** For elements browse.html guarantees. Throws loudly if the markup drifts. */
-const req = <T extends HTMLElement>(id: string): T => {
-  const found = document.getElementById(id) as T | null;
-  if (!found) throw new Error(`browse.html is missing #${id}`);
-  return found;
-};
-
-const escapeHtml = (str: string | null | undefined): string => {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-};
+let orgId: string | null = null;
+let prefs: DateTimePrefs = { dateFormat: 'mdy', timeFormat: '12h' };
 
 const errorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
 };
 
 // ---------------------------------------------------------------------------
-// Theme
+// Messaging
 // ---------------------------------------------------------------------------
 
-const initTheme = (): void => {
-  const savedTheme = localStorage.getItem('theme');
-  if (savedTheme) {
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  } else {
-    const prefersDark = window.matchMedia(
-      '(prefers-color-scheme: dark)',
-    ).matches;
-    document.documentElement.setAttribute(
-      'data-theme',
-      prefersDark ? 'dark' : 'light',
-    );
-  }
-};
-
-const toggleTheme = (): void => {
-  const currentTheme =
-    document.documentElement.getAttribute('data-theme') || 'dark';
-  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', newTheme);
-  localStorage.setItem('theme', newTheme);
-};
-
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
-let orgId: string | null = null;
-// The list is the single source of truth for Conversations, Export Records
-// and models — the render path below reads through it (list.needsExport,
-// list.display) rather than keeping a second, independently-updated copy
-// that sorting/filtering and rendering could silently disagree on.
-const list = createConversationList();
-let dateFormat: 'dmy' | 'mdy' = 'mdy';
-let timeFormat: '12h' | '24h' = '12h';
-let modelDisplay: 'current' | 'original' = 'original';
-
-/** Narrows a `.filter-option`'s dataset value to StatusFilter without an `as` assertion. */
-const asStatusFilter = (value: string | undefined): StatusFilter => {
-  return value === 'pending' ||
-    value === 'never' ||
-    value === 'stale' ||
-    value === 'exported' ||
-    value === 'projects'
-    ? value
-    : 'all';
-};
-
-/** Narrows a `.sortable` header's dataset value to SortField without an `as` assertion. */
-const asSortField = (value: string | undefined): SortField | null => {
-  return value === 'name' ||
-    value === 'project' ||
-    value === 'created' ||
-    value === 'updated' ||
-    value === 'model'
-    ? value
-    : null;
-};
-
-// ---------------------------------------------------------------------------
-// Preferences
-// ---------------------------------------------------------------------------
-
-const loadDateTimePrefs = async (): Promise<void> => {
-  const result = await storageGet<{ dateFormat?: string; timeFormat?: string }>(
-    'local',
-    ['dateFormat', 'timeFormat'],
-  );
-  dateFormat = result.dateFormat === 'dmy' ? 'dmy' : 'mdy';
-  timeFormat = result.timeFormat === '24h' ? '24h' : '12h';
-};
-
-const loadModelDisplayPref = async (): Promise<void> => {
-  const result = await storageGet<{ modelDisplay?: string }>('local', [
-    'modelDisplay',
-  ]);
-  modelDisplay = result.modelDisplay === 'current' ? 'current' : 'original';
-};
-
-const formatDate = (dt: Date): string => {
-  const m = dt.getMonth() + 1;
-  const d = dt.getDate();
-  const y = dt.getFullYear();
-  return dateFormat === 'dmy' ? `${d}/${m}/${y}` : `${m}/${d}/${y}`;
-};
-
-const formatTime = (dt: Date): string => {
-  if (timeFormat === '24h') {
-    return dt.toLocaleTimeString([], {
-      hour: '2-digit',
-      hour12: false,
-      minute: '2-digit',
-    });
-  }
-  return dt.toLocaleTimeString([], {
-    hour: '2-digit',
-    hour12: true,
-    minute: '2-digit',
-  });
-};
-
-// ---------------------------------------------------------------------------
-// Page lifecycle
-// ---------------------------------------------------------------------------
-
-// When user navigates back to this page from the options page (bfcache hit),
-// reload so changed preferences (model display, date/time format, etc.) take
-// effect without a manual refresh.
-window.addEventListener('pageshow', (event) => {
-  if (event.persisted) window.location.reload();
-});
-
-document.addEventListener('DOMContentLoaded', async () => {
-  initTheme();
-  initErrorCapture('browse');
-
-  // Firefox MV3 host permissions are optional and user-revocable. Without
-  // https://claude.ai/* nothing below can succeed, so say so rather than
-  // showing an empty table. Chrome always reports true here.
-  if (!(await hasClaudeAccessSafely())) {
-    showPermissionNotice();
-    return;
-  }
-
-  // Wire up UI listeners (settings dropdown, filters, search, etc.) immediately
-  // so the chrome stays interactive while orgId / conversations are still loading.
-  setupEventListeners();
-  const loadingStart = Date.now();
-  await loadOrgId();
-  list.setExportRecords(await loadExportRecords());
-  await loadDateTimePrefs();
-  await loadModelDisplayPref();
-  list.setModels(await loadModelDisplay(modelDisplay));
-  const elapsed = Date.now() - loadingStart;
-  if (elapsed < 1000) await new Promise((r) => setTimeout(r, 1000 - elapsed));
-  const loadingText = el('loadingText');
-  if (loadingText) loadingText.textContent = 'Loading conversations...';
-  await loadConversations();
-});
-
-const hasClaudeAccessSafely = async (): Promise<boolean> => {
-  try {
-    return await hasClaudeAccess();
-  } catch {
-    // A browser that can't answer the question must not be blocked on it.
-    return true;
-  }
-};
-
-const showPermissionNotice = (): void => {
-  const tableContent = req('tableContent');
+const showError = (message: string): void => {
+  const tableContent = requireElement('tableContent');
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'error';
+  errorDiv.textContent = message;
   tableContent.innerHTML = '';
+  tableContent.appendChild(errorDiv);
+};
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'error';
+const showToast = (message: string, isError = false): void => {
+  const toast = getElement('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.style.background = isError ? '#d32f2f' : '#333';
+  toast.classList.add('show');
 
-  const message = document.createElement('div');
-  message.textContent =
-    'Claude Exporter needs permission to access https://claude.ai/ before it can list your conversations.';
-  wrapper.appendChild(message);
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000);
+};
 
-  const button = document.createElement('button');
-  button.className = 'export-all-btn';
-  button.style.marginTop = '15px';
-  button.textContent = 'Grant access to claude.ai';
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    try {
-      if (await requestClaudeAccess()) {
-        window.location.reload();
-        return;
-      }
-      showToast('Permission was not granted', true);
-    } catch (error) {
-      showToast(`Permission request failed: ${errorMessage(error)}`, true);
-    }
-    button.disabled = false;
-  });
-  wrapper.appendChild(button);
-
-  tableContent.appendChild(wrapper);
+// Toasts share one element, so a later one replaces the one before it. That is
+// the pre-existing behaviour and the ordering in exportOutcome assumes it:
+// the caveats are what remains on screen.
+const showToasts = (toasts: Toast[]): void => {
+  for (const toast of toasts) showToast(toast.message, toast.isError);
 };
 
 // ---------------------------------------------------------------------------
-// Loading
+// Rendering
 // ---------------------------------------------------------------------------
 
-// Load organization ID — auto-detect first, fall back to stored
-const loadOrgId = async (): Promise<void> => {
-  try {
-    const detected = await detectOrgId();
-    if (detected) {
-      orgId = detected;
-      // Save for future use / fallback
-      void storageSet('sync', { organizationId: detected });
-      return;
-    }
-  } catch (e) {
-    console.log('Auto-detect org ID failed, falling back to stored:', e);
-  }
-
-  const stored = await storageGet<{ organizationId?: string }>('sync', [
-    'organizationId',
-  ]);
-  orgId = stored.organizationId || null;
-  if (!orgId) {
-    showError(
-      'Organization ID not configured. Please open a claude.ai tab and reload this page, or configure it manually in the extension options.',
-    );
-  }
+const updateStats = (): void => {
+  const stats = getElement('stats');
+  if (!stats) return;
+  stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.needsExportCount()} new/updated)`;
 };
 
-const loadProjects = async (): Promise<void> => {
-  if (!orgId) return;
-  try {
-    const projects: Project[] = await fetchProjects(orgId);
-    const projectsMap: Record<string, string> = {};
-    projects.forEach((project) => {
-      const projectId = project.uuid || project.id;
-      const projectName = project.name || project.title || 'Untitled Project';
-      if (projectId) projectsMap[projectId] = projectName;
-    });
-    list.setProjects(projectsMap);
-  } catch (error) {
-    console.warn('Error loading projects:', error);
-  }
+const updateExportButtonText = (): void => {
+  const exportBtn = getButton('exportAllBtn');
+  if (!exportBtn) return;
+
+  const count = list.selectedCount();
+  exportBtn.textContent =
+    count > 0 ? `Export Selected (${count})` : 'Export All';
 };
 
-const loadConversations = async (): Promise<void> => {
-  if (!orgId) return;
-
-  try {
-    // Load projects first so the Project column resolves on the first render
-    await loadProjects();
-
-    const conversations = await fetchConversationList(orgId);
-
-    // Best-effort: snapshot recording must never block rendering
-    try {
-      await recordModelSnapshots(conversations);
-      list.setModels(await loadModelDisplay(modelDisplay));
-    } catch (error) {
-      console.error('Error recording model snapshots:', error);
-    }
-
-    // Infer models for conversations with null model
-    const conversationsWithModels = conversations.map((conv) => ({
-      ...conv,
-      model: inferModel(conv),
-    }));
-    list.setConversations(conversationsWithModels);
-
-    displayConversations();
-    updateStats();
-  } catch (error) {
-    console.error('Error loading conversations:', error);
-    showError(`Failed to load conversations: ${errorMessage(error)}`);
-  }
-};
-
-// ---------------------------------------------------------------------------
-// Table rendering
-// ---------------------------------------------------------------------------
-
-const displayConversations = (): void => {
-  const tableContent = req('tableContent');
-  const view = list.view();
-
-  if (view.length === 0) {
-    tableContent.innerHTML =
-      '<div class="no-results">No conversations found</div>';
-    return;
-  }
-
-  let html = `
-    <table>
-      <thead>
-        <tr>
-          <th class="sortable" data-sort="name">Name${list.sortIndicator('name')}</th>
-          <th class="sortable" data-sort="project">Project${list.sortIndicator('project')}</th>
-          <th class="sortable" data-sort="updated">Updated${list.sortIndicator('updated')}</th>
-          <th class="sortable" data-sort="created">Created${list.sortIndicator('created')}</th>
-          <th class="sortable" data-sort="model">Model${list.sortIndicator('model')}</th>
-          <th>Actions</th>
-          <th class="checkbox-col">
-            <input type="checkbox" id="selectAll" class="select-all-checkbox" ${list.allViewSelected() ? 'checked' : ''}>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-  view.forEach((conv, index) => {
-    const updatedDt = new Date(conv.updated_at);
-    const createdDt = new Date(conv.created_at);
-    const updatedDate = formatDate(updatedDt);
-    const updatedTime = formatTime(updatedDt);
-    const createdDate = formatDate(createdDt);
-    const createdTime = formatTime(createdDt);
-    const modelInfo = list.display(conv);
-    const modelBadgeClass = getModelBadgeClass(modelInfo.model);
-    const projectName = list.projectName(conv);
-
-    const newUpdated = list.needsExport(conv);
-    html += `
-      <tr data-id="${escapeHtml(conv.uuid)}">
-        <td>
-          <div class="conversation-name">
-            ${newUpdated ? '<span class="new-dot" title="New or updated since last export"></span>' : ''}
-            <a href="https://claude.ai/chat/${escapeHtml(conv.uuid)}" target="_blank" title="${escapeHtml(conv.name)}">
-              ${escapeHtml(conv.name)}
-            </a>
-          </div>
-        </td>
-        <td>${escapeHtml(projectName)}</td>
-        <td class="date">${escapeHtml(updatedDate)}<br><span class="time">${escapeHtml(updatedTime)}</span></td>
-        <td class="date">${escapeHtml(createdDate)}<br><span class="time">${escapeHtml(createdTime)}</span></td>
-        <td>
-          ${
-            modelInfo.bounced
-              ? `<span class="model-cell" title="${escapeHtml(modelInfo.otherLabel)} ${escapeHtml(formatModelName(modelInfo.other))}"><span class="model-badge ${modelBadgeClass}">${escapeHtml(formatModelName(modelInfo.model))}</span><span class="model-bounced ${modelBadgeClass}">*</span></span>`
-              : `<span class="model-badge ${modelBadgeClass}">${escapeHtml(formatModelName(modelInfo.model))}</span>`
-          }
-        </td>
-        <td>
-          <div class="actions">
-            <button class="btn-small btn-export" data-id="${escapeHtml(conv.uuid)}" data-name="${escapeHtml(conv.name)}">
-              Export
-            </button>
-          </div>
-        </td>
-        <td class="checkbox-col">
-          <input type="checkbox" class="conversation-checkbox" data-id="${escapeHtml(conv.uuid)}" data-index="${index}" ${list.selected().has(conv.uuid) ? 'checked' : ''}>
-        </td>
-      </tr>
-    `;
-  });
-
-  html += `
-      </tbody>
-    </table>
-  `;
-
-  // Security: All user-provided data in html has been sanitized with escapeHtml()
-  // before concatenation. The HTML structure itself is static/trusted template code.
-  tableContent.innerHTML = html;
-
+const wireRowExportButtons = (): void => {
   document.querySelectorAll<HTMLButtonElement>('.btn-export').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
       if (!id) return;
-      // Take updated_at from the loaded list rather than the button's dataset:
-      // it is what decides whether the Chat Cache may answer instead of the
-      // network, so it must come from the same source the table rendered.
-      const conv = list.all().find((candidate) => candidate.uuid === id);
-      void exportSingle({
-        name: btn.dataset.name || id,
-        updatedAt: conv?.updated_at,
-        uuid: id,
-      });
+      void exportSingle(rowExportTarget(list, id, btn.dataset.name || id));
     });
   });
+};
 
-  // Use 'click' rather than 'change' so the shift key is observable
+const wireRowCheckboxes = (): void => {
+  // 'click' rather than 'change' so the shift key is observable
   document
     .querySelectorAll<HTMLInputElement>('.conversation-checkbox')
     .forEach((checkbox) => {
       checkbox.addEventListener('click', handleCheckboxChange);
     });
 
-  const selectAllCheckbox = el<HTMLInputElement>('selectAll');
-  if (selectAllCheckbox) {
-    selectAllCheckbox.addEventListener('click', handleSelectAll);
-  }
+  getInput('selectAll')?.addEventListener('click', handleSelectAll);
+};
 
+const wireSortableHeaders = (): void => {
   document.querySelectorAll<HTMLElement>('.sortable').forEach((header) => {
     header.addEventListener('click', () => {
       const field = asSortField(header.dataset.sort);
-      if (field) {
-        list.toggleSort(field);
-        displayConversations();
-        updateStats();
-      }
+      if (!field) return;
+      list.toggleSort(field);
+      displayConversations();
     });
   });
+};
 
+/** Rebuilds the table from the list's current View and re-wires its controls. */
+const displayConversations = (): void => {
+  requireElement('tableContent').innerHTML = renderTable(
+    buildTableModel(list, prefs),
+  );
+  updateStats();
+
+  wireRowExportButtons();
+  wireRowCheckboxes();
+  wireSortableHeaders();
   updateExportButtonText();
 
-  const exportAllBtn = el<HTMLButtonElement>('exportAllBtn');
+  const exportAllBtn = getButton('exportAllBtn');
   if (exportAllBtn) exportAllBtn.disabled = false;
 };
 
@@ -482,12 +195,11 @@ const displayConversations = (): void => {
 
 // Selection changes must NOT rebuild the table: displayConversations()
 // replaces tableContent's innerHTML, which destroys the very <input> the
-// click/change event fired on. That drops keyboard focus to <body> (a
-// keyboard user tabbed to a checkbox, pressed Space, and now has to re-tab
-// from the top of the document for every row) and re-parses/re-renders
-// potentially thousands of rows on every single click. The list's state is
-// already updated by this point, so just paint that state onto the existing
-// DOM nodes.
+// click event fired on. That drops keyboard focus to <body> (a keyboard user
+// tabbed to a checkbox, pressed Space, and now has to re-tab from the top of
+// the document for every row) and re-parses potentially thousands of rows on
+// every single click. The list's state is already updated by this point, so
+// just paint that state onto the existing DOM nodes.
 const syncSelectionDom = (): void => {
   document
     .querySelectorAll<HTMLInputElement>('.conversation-checkbox')
@@ -496,71 +208,104 @@ const syncSelectionDom = (): void => {
       checkbox.checked = !!id && list.selected().has(id);
     });
 
-  const selectAllCheckbox = el<HTMLInputElement>('selectAll');
+  const selectAllCheckbox = getInput('selectAll');
   if (selectAllCheckbox) selectAllCheckbox.checked = list.allViewSelected();
+
+  updateExportButtonText();
 };
 
 const handleCheckboxChange = (e: MouseEvent): void => {
   if (!(e.currentTarget instanceof HTMLInputElement)) return;
   const checkbox = e.currentTarget;
   const conversationId = checkbox.dataset.id;
-  const currentIndex = parseInt(checkbox.dataset.index || '', 10);
   if (!conversationId) return;
 
-  list.check(conversationId, currentIndex, e.shiftKey);
-
+  list.check(
+    conversationId,
+    parseInt(checkbox.dataset.index || '', 10),
+    e.shiftKey,
+  );
   syncSelectionDom();
-  updateExportButtonText();
 };
 
 const handleSelectAll = (e: Event): void => {
   if (!(e.currentTarget instanceof HTMLInputElement)) return;
-
   list.checkAll(e.currentTarget.checked);
-
   syncSelectionDom();
-  updateExportButtonText();
-};
-
-const updateExportButtonText = (): void => {
-  const exportBtn = el<HTMLButtonElement>('exportAllBtn');
-  if (!exportBtn) return;
-
-  const count = list.selectedCount();
-  exportBtn.textContent =
-    count > 0 ? `Export Selected (${count})` : 'Export All';
-};
-
-const updateStats = (): void => {
-  const stats = el('stats');
-  if (!stats) return;
-  stats.textContent = `Showing ${list.view().length} of ${list.all().length} conversations (${list.needsExportCount()} new/updated)`;
-};
-
-const autoSelectNewUpdated = (): void => {
-  // Only the Selection changes here, not the View — same in-place treatment
-  // as handleCheckboxChange/handleSelectAll.
-  list.selectPending();
-  syncSelectionDom();
-  updateExportButtonText();
 };
 
 // ---------------------------------------------------------------------------
-// Export — options gathering, progress modal, Export Records
+// Loading
 // ---------------------------------------------------------------------------
 
-const readExportOptions = (): ExportOptions => {
-  return {
-    artifactFormat: req<HTMLSelectElement>('artifactFormat').value,
-    extractArtifacts: req<HTMLInputElement>('extractArtifacts').checked,
-    flattenArtifacts: req<HTMLInputElement>('flattenArtifacts').checked,
-    format: req<HTMLSelectElement>('exportFormat').value as ExportFormat,
-    includeArtifacts: req<HTMLInputElement>('includeArtifacts').checked,
-    includeChats: req<HTMLInputElement>('includeChats').checked,
-    includeMetadata: req<HTMLInputElement>('includeMetadata').checked,
-    includeThinking: req<HTMLInputElement>('includeThinking').checked,
-  };
+const loadProjects = async (orgIdentifier: string): Promise<void> => {
+  try {
+    const projects = await fetchProjects(orgIdentifier);
+    const projectsMap: Record<string, string> = {};
+    for (const project of projects) {
+      const projectId = project.uuid || project.id;
+      if (!projectId) continue;
+      projectsMap[projectId] =
+        project.name || project.title || 'Untitled Project';
+    }
+    list.setProjects(projectsMap);
+  } catch (error) {
+    // The Project column degrades to '-'; nothing else depends on this.
+    console.warn(new Error('Loading projects failed', { cause: error }));
+  }
 };
+
+/** Best-effort: model history must never block the table from rendering. */
+const refreshModels = async (): Promise<void> => {
+  try {
+    list.setModels(await loadModelDisplay(await loadModelPreference()));
+  } catch (error) {
+    console.warn(new Error('Loading model display failed', { cause: error }));
+  }
+};
+
+const recordModelsFor = async (
+  conversations: Awaited<ReturnType<typeof fetchConversationList>>,
+): Promise<void> => {
+  try {
+    await recordModelSnapshots(conversations);
+  } catch (error) {
+    console.warn(
+      new Error('Recording model snapshots failed', { cause: error }),
+    );
+    return;
+  }
+  await refreshModels();
+};
+
+const loadConversations = async (): Promise<void> => {
+  if (!orgId) return;
+
+  try {
+    // Projects first, so the Project column resolves on the first render
+    await loadProjects(orgId);
+    const conversations = await fetchConversationList(orgId);
+    await recordModelsFor(conversations);
+
+    list.setConversations(
+      conversations.map((conv) => ({ ...conv, model: inferModel(conv) })),
+    );
+    displayConversations();
+  } catch (error) {
+    console.error(new Error('Loading conversations failed', { cause: error }));
+    showError(`Failed to load conversations: ${errorMessage(error)}`);
+  }
+};
+
+/** Apply a freshly-loaded Export Record book and repaint the staleness dots. */
+const applyExportRecords = (book: ExportRecordBook): void => {
+  list.setExportRecords(book);
+  displayConversations();
+};
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
 
 interface ProgressModal {
   dispose(): void;
@@ -571,11 +316,11 @@ interface ProgressModal {
 
 /** Drives #progressModal and wires #cancelExport to an AbortController. */
 const openProgressModal = (initialText: string): ProgressModal => {
-  const modal = req('progressModal');
-  const bar = req('progressBar');
-  const text = req('progressText');
-  const stats = req('progressStats');
-  const cancelButton = req<HTMLButtonElement>('cancelExport');
+  const modal = requireElement('progressModal');
+  const bar = requireElement('progressBar');
+  const text = requireElement('progressText');
+  const stats = requireElement('progressStats');
+  const cancelButton = requireButton('cancelExport');
 
   const controller = new AbortController();
 
@@ -602,16 +347,10 @@ const openProgressModal = (initialText: string): ProgressModal => {
       cancelButton.removeEventListener('click', onCancel);
     },
     update(progress: ExportProgress) {
-      if (progress.phase === 'zipping') {
-        text.textContent = 'Creating ZIP file...';
-        bar.style.width = `${progress.completed}%`;
-        return;
-      }
-      const done = progress.completed + progress.failed;
-      const percent =
-        progress.total > 0 ? Math.round((done / progress.total) * 100) : 0;
-      bar.style.width = `${percent}%`;
-      stats.textContent = `${progress.completed} succeeded, ${progress.failed} failed out of ${progress.total}`;
+      const display = progressDisplay(progress);
+      bar.style.width = display.barWidth;
+      if (display.text !== null) text.textContent = display.text;
+      if (display.stats !== null) stats.textContent = display.stats;
     },
   };
 };
@@ -620,132 +359,88 @@ const isAbort = (error: unknown): boolean => {
   return error instanceof DOMException && error.name === 'AbortError';
 };
 
-/** Apply a freshly-loaded Export Record book and repaint the table's staleness state. */
-const applyExportRecords = (book: ExportRecordBook): void => {
-  list.setExportRecords(book);
-  displayConversations();
-  updateStats();
+/** Guards every export entry point; null means "already told the user". */
+const requireOrgId = (): string | null => {
+  if (orgId) return orgId;
+  showToast('Organization ID not configured', true);
+  return null;
 };
 
 /** The per-row Export button. */
 const exportSingle = async (target: ExportTarget): Promise<void> => {
-  if (!orgId) {
-    showToast('Organization ID not configured', true);
-    return;
-  }
+  const organizationId = requireOrgId();
+  if (!organizationId) return;
 
   const options = readExportOptions();
   showToast(`Exporting ${target.name}...`);
 
   try {
-    const result = await exportConversations(orgId, [target], options, {
-      cache: localCache,
-    });
-    showToast(
-      result.artifactCount > 0
-        ? `Exported: ${target.name} with ${result.artifactCount} artifact(s)`
-        : `Exported: ${target.name}`,
+    const result = await exportConversations(
+      organizationId,
+      [target],
+      options,
+      {
+        cache: localCache,
+      },
     );
-    if (!result.recordsWritten) {
-      showToast(
-        'Export succeeded, but could not be recorded as exported.',
-        true,
-      );
-    }
+    showToasts(singleExportToasts(result, target.name));
     applyExportRecords(await loadExportRecords());
   } catch (error) {
-    console.error('Export error:', error);
+    console.error(new Error('Export failed', { cause: error }));
     showToast(`Failed to export: ${errorMessage(error)}`, true);
   }
 };
 
+const runBulkExport = async (
+  organizationId: string,
+  targets: ExportTarget[],
+  options: ExportOptions,
+  modal: ProgressModal,
+): Promise<ExportResult> => {
+  return exportConversations(organizationId, targets, options, {
+    // The browse page is extension-origin, the same as the background worker,
+    // so it shares that IndexedDB and needs no relay.
+    cache: localCache,
+    signal: modal.signal,
+    onProgress: (progress) => modal.update(progress),
+  });
+};
+
+const initialProgressText = (targets: ExportTarget[]): string => {
+  return targets.length === 1
+    ? `Exporting ${targets[0].name}...`
+    : `Exporting ${targets.length} conversations...`;
+};
+
 /** The "Export All" / "Export Selected (N)" button. */
 const exportAllFiltered = async (): Promise<void> => {
-  if (!orgId) {
-    showToast('Organization ID not configured', true);
-    return;
-  }
+  const organizationId = requireOrgId();
+  if (!organizationId) return;
 
   const options = readExportOptions();
-  const button = req<HTMLButtonElement>('exportAllBtn');
+  const button = requireButton('exportAllBtn');
   const originalButtonText = button.textContent || 'Export All';
   button.disabled = true;
   button.textContent = 'Preparing...';
 
-  // Export ALL selected conversations, even ones currently hidden by the
-  // filter — the checkbox is the user's explicit choice, the filter is just a
-  // view. The "Export Selected (N)" button text already reflects the full
-  // selection count, so users aren't surprised.
-  const conversationsToExport =
-    list.selectedCount() > 0
-      ? list.all().filter((conv) => list.selected().has(conv.uuid))
-      : list.view();
-
-  const targets: ExportTarget[] = conversationsToExport.map((conv) => ({
-    name: conv.name,
-    updatedAt: conv.updated_at,
-    uuid: conv.uuid,
-  }));
-
-  const single = targets.length === 1;
-  const modal = openProgressModal(
-    single
-      ? `Exporting ${targets[0].name}...`
-      : `Exporting ${targets.length} conversations...`,
-  );
+  const targets = exportTargets(list);
+  const modal = openProgressModal(initialProgressText(targets));
 
   try {
-    const result = await exportConversations(orgId, targets, options, {
-      // The browse page is extension-origin, the same as the background
-      // worker, so it shares that IndexedDB and needs no relay.
-      cache: localCache,
-      signal: modal.signal,
-      onProgress: (progress) => modal.update(progress),
-    });
-
+    const result = await runBulkExport(organizationId, targets, options, modal);
     modal.hide();
-
-    const failed = result.failedNames.length;
-    const completed = result.exportedIds.length;
-    if (single) {
-      showToast(
-        result.artifactCount > 0
-          ? `Exported: ${targets[0].name} with ${result.artifactCount} artifact(s)`
-          : `Exported: ${targets[0].name}`,
-      );
-    } else if (failed > 0) {
-      showToast(
-        `Exported ${completed} of ${targets.length} conversations (${failed} failed).`,
-      );
-    } else {
-      const cached =
-        result.fromCache > 0 ? ` (${result.fromCache} from cache)` : '';
-      showToast(
-        `Successfully exported all ${completed} conversations!${cached}`,
-      );
-    }
-
-    // Worth saying because the next export will be slow again, but only after
-    // the success message: the file the user asked for is unaffected.
-    if (result.cacheQuotaExceeded) {
-      showToast(
-        'Local storage is full, so conversations are no longer being cached.',
-        true,
-      );
-    }
-    if (!result.recordsWritten) {
-      showToast(
-        'Export succeeded, but could not be recorded as exported.',
-        true,
-      );
-    }
-
+    showToasts(
+      bulkExportToasts(
+        result,
+        targets.map((target) => target.name),
+      ),
+    );
     applyExportRecords(await loadExportRecords());
   } catch (error) {
     modal.hide();
     // A cancel already showed its own toast via the cancel button.
     if (!isAbort(error)) {
-      console.error('Export error:', error);
+      console.error(new Error('Export failed', { cause: error }));
       showToast(`Export failed: ${errorMessage(error)}`, true);
     }
   } finally {
@@ -756,154 +451,125 @@ const exportAllFiltered = async (): Promise<void> => {
 };
 
 // ---------------------------------------------------------------------------
-// Messaging
+// Event wiring — one arrow per concern
 // ---------------------------------------------------------------------------
 
-const showError = (message: string): void => {
-  const tableContent = req('tableContent');
-  const errorDiv = document.createElement('div');
-  errorDiv.className = 'error';
-  errorDiv.textContent = message;
-  tableContent.innerHTML = '';
-  tableContent.appendChild(errorDiv);
-};
+const wireOptionDependencies = (): void => {
+  const includeChats = requireInput('includeChats');
+  const dependents = CHAT_DEPENDENT_IDS.map(requireInput);
 
-const showToast = (message: string, isError = false): void => {
-  const toast = el('toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.style.background = isError ? '#d32f2f' : '#333';
-  toast.classList.add('show');
-
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 3000);
-};
-
-// ---------------------------------------------------------------------------
-// Event wiring
-// ---------------------------------------------------------------------------
-
-const setupEventListeners = (): void => {
-  // Handle checkbox dependencies
-  const includeChatsCheckbox = req<HTMLInputElement>('includeChats');
-  const includeThinkingCheckbox = req<HTMLInputElement>('includeThinking');
-  const includeMetadataCheckbox = req<HTMLInputElement>('includeMetadata');
-  const includeArtifactsCheckbox = req<HTMLInputElement>('includeArtifacts');
-
-  const updateCheckboxStates = (): void => {
-    const chatsEnabled = includeChatsCheckbox.checked;
-
-    // Disable thinking, metadata and inline artifacts when chats is unchecked
-    includeThinkingCheckbox.disabled = !chatsEnabled;
-    includeMetadataCheckbox.disabled = !chatsEnabled;
-    includeArtifactsCheckbox.disabled = !chatsEnabled;
-
-    // Optionally uncheck them when disabled
-    if (!chatsEnabled) {
-      includeThinkingCheckbox.checked = false;
-      includeMetadataCheckbox.checked = false;
-      includeArtifactsCheckbox.checked = false;
+  const apply = (): void => {
+    const state = dependentOptionState(includeChats.checked);
+    for (const dependent of dependents) {
+      dependent.disabled = state.disabled;
+      if (state.checked === false) dependent.checked = false;
     }
   };
 
-  includeChatsCheckbox.addEventListener('change', updateCheckboxStates);
-  updateCheckboxStates(); // Initialize on load
+  includeChats.addEventListener('change', apply);
+  apply();
+};
 
-  // Settings dropdown
-  const settingsBtn = req('settingsBtn');
-  const settingsDropdown = req('settingsDropdown');
-
-  settingsBtn.addEventListener('click', (e) => {
+/** Closes on an outside click, but not on a click within itself. */
+const wireDropdown = (triggerId: string, dropdown: HTMLElement): void => {
+  requireElement(triggerId).addEventListener('click', (e) => {
     e.stopPropagation();
-    settingsDropdown.classList.toggle('open');
-    // Update org ID display when opening
-    if (settingsDropdown.classList.contains('open')) {
-      const orgDisplay = req('orgIdDisplay');
-      if (orgId) {
-        orgDisplay.textContent = orgId.substring(0, 8) + '...';
-        orgDisplay.title = orgId;
-      } else {
-        orgDisplay.textContent = 'Not set';
-      }
-      // Update theme label
-      const theme =
-        document.documentElement.getAttribute('data-theme') || 'dark';
-      req('themeLabel').textContent = theme === 'dark' ? 'Dark' : 'Light';
-    }
+    dropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', () => dropdown.classList.remove('open'));
+  dropdown.addEventListener('click', (e) => e.stopPropagation());
+};
+
+const showOrgIdInSettings = (): void => {
+  const orgDisplay = requireElement('orgIdDisplay');
+  if (!orgId) {
+    orgDisplay.textContent = 'Not set';
+    return;
+  }
+  orgDisplay.textContent = orgId.substring(0, 8) + '...';
+  orgDisplay.title = orgId;
+};
+
+const showThemeInSettings = (): void => {
+  requireElement('themeLabel').textContent = themeLabel(currentTheme());
+};
+
+const wireSettingsDropdown = (settingsDropdown: HTMLElement): void => {
+  wireDropdown('settingsBtn', settingsDropdown);
+  // The dropdown's contents are only correct at the moment it opens.
+  requireElement('settingsBtn').addEventListener('click', () => {
+    if (!settingsDropdown.classList.contains('open')) return;
+    showOrgIdInSettings();
+    showThemeInSettings();
   });
 
-  // Close dropdown when clicking outside
-  document.addEventListener('click', () => {
-    settingsDropdown.classList.remove('open');
-  });
-  settingsDropdown.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-
-  // Theme toggle
-  req('themeToggle').addEventListener('click', () => {
+  requireElement('themeToggle').addEventListener('click', () => {
     toggleTheme();
-    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-    req('themeLabel').textContent = theme === 'dark' ? 'Dark' : 'Light';
+    showThemeInSettings();
   });
+};
 
-  // Click org ID row to copy full ID to clipboard
-  req('settingsOrgId').addEventListener('click', async () => {
-    if (!orgId) {
-      showToast('No org ID set', true);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(orgId);
-      showToast('Org ID copied to clipboard');
-    } catch {
-      showToast('Failed to copy org ID', true);
-    }
+const copyOrgId = async (): Promise<void> => {
+  if (!orgId) {
+    showToast('No org ID set', true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(orgId);
+    showToast('Org ID copied to clipboard');
+  } catch (error) {
+    console.warn(new Error('Copying the org ID failed', { cause: error }));
+    showToast('Failed to copy org ID', true);
+  }
+};
+
+// Open the options page in the same tab so the back button returns here.
+const openOptionsPage = (): void => {
+  window.location.href = getExtensionUrl('options.html');
+};
+
+const wireOrgIdControls = (settingsDropdown: HTMLElement): void => {
+  requireElement('settingsOrgId').addEventListener('click', async () => {
+    await copyOrgId();
     settingsDropdown.classList.remove('open');
   });
+  requireElement('editOrgId').addEventListener('click', openOptionsPage);
+  requireElement('advancedOptions').addEventListener('click', openOptionsPage);
+};
 
-  // Edit org ID — open options in the same tab so the back button returns here
-  req('editOrgId').addEventListener('click', () => {
-    window.location.href = getExtensionUrl('options.html');
-  });
-
-  // Advanced Options — open options in the same tab so the back button returns here
-  req('advancedOptions').addEventListener('click', () => {
-    window.location.href = getExtensionUrl('options.html');
-  });
-
-  // Mark all as exported
-  req('markAllExported').addEventListener('click', async () => {
-    const ids = list.all().map((c) => c.uuid);
+const wireExportRecordControls = (settingsDropdown: HTMLElement): void => {
+  requireElement('markAllExported').addEventListener('click', async () => {
+    const ids = list.all().map((conv) => conv.uuid);
     applyExportRecords(await markExported(ids));
     settingsDropdown.classList.remove('open');
     showToast(`Marked ${ids.length} conversations as exported`);
   });
 
-  // Mark all as new
-  req('markAllNew').addEventListener('click', async () => {
+  requireElement('markAllNew').addEventListener('click', async () => {
     applyExportRecords(await clearExportRecords());
     list.clearSelection();
-    autoSelectNewUpdated();
+    // Only the Selection changes here, not the View — same in-place treatment
+    // as handleCheckboxChange/handleSelectAll.
+    list.selectPending();
+    syncSelectionDom();
     settingsDropdown.classList.remove('open');
     showToast('All conversations marked as new');
   });
+};
 
-  // Backup / Restore Database submenu — shared logic lives in features/backup
-  req('backupData').addEventListener('click', async () => {
+const wireBackupRestore = (settingsDropdown: HTMLElement): void => {
+  requireElement('backupData').addEventListener('click', async () => {
     settingsDropdown.classList.remove('open');
     const { message, success } = await backupExtensionData();
     showToast(message, !success);
   });
 
-  // Import flow: mode-choice modal → file picker → import.
-  // pendingImportMode bridges the async file-picker boundary.
-  let pendingImportMode: ImportMode | null = null;
+  // Import flow: mode-choice modal → file picker → import. The chosen mode has
+  // to survive the async file-picker boundary, hence the closure variable.
+  const restoreFileBrowse = requireInput('restoreFileBrowse');
+  let pendingImportMode: Awaited<ReturnType<typeof showImportModeModal>> = null;
 
-  const restoreFileBrowse = req<HTMLInputElement>('restoreFileBrowse');
-
-  req('restoreData').addEventListener('click', async () => {
+  requireElement('restoreData').addEventListener('click', async () => {
     settingsDropdown.classList.remove('open');
     const mode = await showImportModeModal();
     if (mode === null) return; // user cancelled
@@ -920,70 +586,166 @@ const setupEventListeners = (): void => {
     const { message, success } = await importBackup(file, mode);
     showToast(message, !success);
   });
+};
 
-  // Search input
-  const searchInput = req<HTMLInputElement>('searchInput');
-  const searchBox = req('searchBox');
-  searchInput.addEventListener('input', () => {
-    searchBox.classList.toggle('has-text', !!searchInput.value);
-    list.setSearch(searchInput.value);
+const wireSearch = (searchInput: HTMLInputElement): void => {
+  const searchBox = requireElement('searchBox');
+
+  const setSearch = (value: string): void => {
+    searchInput.value = value;
+    searchBox.classList.toggle('has-text', !!value);
+    list.setSearch(value);
     displayConversations();
-    updateStats();
-  });
+  };
 
-  // Clear search
-  req('clearSearch').addEventListener('click', () => {
-    searchInput.value = '';
-    searchBox.classList.remove('has-text');
-    list.setSearch('');
-    displayConversations();
-    updateStats();
-  });
+  searchInput.addEventListener('input', () => setSearch(searchInput.value));
+  requireElement('clearSearch').addEventListener('click', () => setSearch(''));
+};
 
-  // Filter dropdown
-  const filterBtn = req('filterBtn');
-  const filterDropdown = req('filterDropdown');
-
-  filterBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    filterDropdown.classList.toggle('open');
-  });
-
-  document.addEventListener('click', () => {
-    filterDropdown.classList.remove('open');
-  });
-  filterDropdown.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
+const wireFilters = (searchInput: HTMLInputElement): void => {
+  const filterBtn = requireElement('filterBtn');
+  const filterDropdown = requireElement('filterDropdown');
+  wireDropdown('filterBtn', filterDropdown);
 
   document.querySelectorAll<HTMLElement>('.filter-option').forEach((option) => {
     option.addEventListener('click', () => {
       const statusFilter = asStatusFilter(option.dataset.value);
       list.setStatusFilter(statusFilter);
-      // Update selected state
+
       document
         .querySelectorAll('.filter-option')
-        .forEach((o) => o.classList.remove('selected'));
+        .forEach((other) => other.classList.remove('selected'));
       option.classList.add('selected');
-      // Search bar placeholder reflects the active scope
+      // The search bar's placeholder reflects the active scope
       searchInput.placeholder = list.searchPlaceholder();
-      // Update button state
       filterBtn.classList.toggle('active', statusFilter !== 'all');
       filterDropdown.classList.remove('open');
       displayConversations();
-      updateStats();
     });
   });
 
-  // Set initial selected state
   document
     .querySelector('.filter-option[data-value="all"]')
     ?.classList.add('selected');
+};
 
-  // Export all button
-  req('exportAllBtn').addEventListener('click', () => {
+const setupEventListeners = (): void => {
+  const settingsDropdown = requireElement('settingsDropdown');
+  const searchInput = requireInput('searchInput');
+
+  wireOptionDependencies();
+  wireSettingsDropdown(settingsDropdown);
+  wireOrgIdControls(settingsDropdown);
+  wireExportRecordControls(settingsDropdown);
+  wireBackupRestore(settingsDropdown);
+  wireSearch(searchInput);
+  wireFilters(searchInput);
+
+  requireElement('exportAllBtn').addEventListener('click', () => {
     void exportAllFiltered();
   });
 };
+
+// ---------------------------------------------------------------------------
+// Page lifecycle
+// ---------------------------------------------------------------------------
+
+const hasClaudeAccessSafely = async (): Promise<boolean> => {
+  try {
+    return await hasClaudeAccess();
+  } catch (error) {
+    // A browser that can't answer the question must not be blocked on it.
+    console.warn(
+      new Error('Checking claude.ai host access failed', { cause: error }),
+    );
+    return true;
+  }
+};
+
+const grantAccess = async (button: HTMLButtonElement): Promise<void> => {
+  button.disabled = true;
+  try {
+    if (await requestClaudeAccess()) {
+      window.location.reload();
+      return;
+    }
+    showToast('Permission was not granted', true);
+  } catch (error) {
+    showToast(`Permission request failed: ${errorMessage(error)}`, true);
+  }
+  button.disabled = false;
+};
+
+const showPermissionNotice = (): void => {
+  const tableContent = requireElement('tableContent');
+  tableContent.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'error';
+
+  const message = document.createElement('div');
+  message.textContent =
+    'Claude Exporter needs permission to access https://claude.ai/ before it can list your conversations.';
+  wrapper.appendChild(message);
+
+  const button = document.createElement('button');
+  button.className = 'export-all-btn';
+  button.style.marginTop = '15px';
+  button.textContent = 'Grant access to claude.ai';
+  button.addEventListener('click', () => void grantAccess(button));
+  wrapper.appendChild(button);
+
+  tableContent.appendChild(wrapper);
+};
+
+/** Keep the loading state up for a beat, so it does not flash. */
+const settleLoadingSpinner = async (startedAt: number): Promise<void> => {
+  const elapsed = Date.now() - startedAt;
+  if (elapsed >= 1000) return;
+  await new Promise((resolve) => setTimeout(resolve, 1000 - elapsed));
+};
+
+const loadPageState = async (): Promise<void> => {
+  orgId = await getOrgId();
+  if (!orgId) {
+    showError(
+      'Organization ID not configured. Please open a claude.ai tab and reload this page, or configure it manually in the extension options.',
+    );
+  }
+  list.setExportRecords(await loadExportRecords());
+  prefs = await loadDateTimePrefs();
+  await refreshModels();
+};
+
+// When the user navigates back to this page from the options page (bfcache
+// hit), reload so changed preferences take effect without a manual refresh.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) window.location.reload();
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  initErrorCapture('browse');
+
+  // Firefox MV3 host permissions are optional and user-revocable. Without
+  // https://claude.ai/* nothing below can succeed, so say so rather than
+  // showing an empty table. Chrome always reports true here.
+  if (!(await hasClaudeAccessSafely())) {
+    showPermissionNotice();
+    return;
+  }
+
+  // Wire the UI immediately so the chrome stays interactive while the org ID
+  // and the Conversations are still loading.
+  setupEventListeners();
+
+  const loadingStart = Date.now();
+  await loadPageState();
+  await settleLoadingSpinner(loadingStart);
+
+  const loadingText = getElement('loadingText');
+  if (loadingText) loadingText.textContent = 'Loading conversations...';
+  await loadConversations();
+});
 
 export {};
