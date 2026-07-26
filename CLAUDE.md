@@ -76,7 +76,7 @@ The repo root *is* the extension project — there is no wrapper directory.
 - Not: `wip`, `fix stuff`, `update`, `final FINAL (1)`
 - Group related changes into one commit
 - Don't push unless asked
-- **Branching**: Do all development on `testing`. Merge to `main` only when creating a release
+- **Branching**: `master` is the only long-lived branch. There is no `testing` branch and no `main` branch — both were removed. Work directly on `master` unless a change is big enough to warrant a short-lived feature branch
 
 ### Preserving history across moves
 
@@ -102,7 +102,7 @@ A release now **requires running the build** — `dist/` is the artifact, not th
 
 1. **Verify version** — bump `version` in `package.json`; both manifests derive from it
 2. **Build** — `npm run build` produces `dist/chrome/` and `dist/firefox/`
-3. **Verify the built manifests** — correct version, and the name has no "Beta" suffix on `main`
+3. **Verify the built manifests** — correct version and target-appropriate `background` key
 4. **Create release directory** — `mkdir -p releases/vX.Y.Z`
 5. **ZIP each target** — zip the *contents* of `dist/chrome/` and `dist/firefox/` (Firefox unsigned; user handles .xpi signing via AMO)
 6. **Git tag** — `git tag vX.Y.Z -m "Release vX.Y.Z"`
@@ -123,9 +123,6 @@ When re-injecting into already-open tabs on install/update, background must inje
 
 ### Multi-file exports must always be ZIPped
 Any export producing more than one file always creates a ZIP — never trigger individual browser downloads.
-
-### Extension name differs by branch
-The extension name must be `Claude Exporter` on `main` and `Claude Exporter Beta` on `testing`, so the user can tell at a glance which build is loaded. This is a build variable — do not edit manifests by hand. The popup header reads it from the manifest (`#header-title` in `popup.js`), so it follows automatically.
 
 ### The Chat Cache is never migrated
 Any change to the cache schema, or to the export request's query string, drops the object store. See [ADR-0002](docs/adr/0002-chat-cache-in-indexeddb.md) — migration code here has a best case identical to `clear()` and a worst case of silently exporting stale data.

@@ -12,5 +12,5 @@ The extension shipped as two hand-synced near-duplicate trees (`chrome/`, `firef
 - Firefox MV3 makes host permissions optional and user-revocable at install. The extension is useless without `https://claude.ai/*`, so it must detect the not-granted state and request it rather than silently doing nothing.
 - The release process no longer zips source. `dist/<target>/` is the artifact, so producing a release now *requires* running the build — the "source is the artifact" property, and the ability to load the shipped code unpacked for debugging, is lost and only partly recovered by sourcemaps.
 - Git history for `firefox/*` effectively ends.
-- The per-branch manifest name (`Claude Exporter` vs `Claude Exporter Beta`) becomes a build variable instead of a manual edit during every merge to `main`.
+- The per-branch manifest name (`Claude Exporter` vs `Claude Exporter Beta`) is gone entirely. It existed to distinguish the `testing` build from the `main` build at a glance; with `master` as the only branch there is nothing to distinguish, so the name is a constant.
 - `jszip` becomes an npm dependency rather than a vendored `jszip.min.js`.

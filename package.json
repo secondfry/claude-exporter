@@ -1,12 +1,25 @@
 {
-  "name": "claude-exporter-tests",
+  "name": "claude-exporter",
+  "version": "1.10.17",
   "private": true,
-  "description": "Test harness for Claude Exporter (chrome/utils.js is canonical; firefox/utils.js must mirror).",
+  "type": "module",
+  "description": "Export conversations and artifacts from Claude.ai",
   "scripts": {
+    "build": "npm run build:chrome && npm run build:firefox",
+    "build:chrome": "vite build --mode chrome",
+    "build:firefox": "vite build --mode firefox",
+    "dev": "vite build --mode chrome --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
     "vitest": "^3.2.4"
   }
 }
