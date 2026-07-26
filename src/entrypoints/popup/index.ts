@@ -34,17 +34,17 @@ type DetectOrgIdResponse = ContentDetectOrgIdResponse | FailureResponse;
 type ExportResponse = ContentExportResponse | FailureResponse;
 
 // Get organization ID from storage (fallback)
-async function getStoredOrgId(): Promise<string | undefined> {
+const getStoredOrgId = async (): Promise<string | undefined> => {
   const result = await storageGet<{ organizationId?: string }>('sync', [
     'organizationId',
   ]);
   return result.organizationId;
-}
+};
 
 // Auto-detect organization ID via content script, fall back to a direct
 // detectOrgId() call (when the popup itself has claude.ai access), and
 // finally to the stored org ID.
-async function getOrgId(): Promise<string | undefined> {
+const getOrgId = async (): Promise<string | undefined> => {
   try {
     const [tab] = await queryTabs({ active: true, currentWindow: true });
     if (
@@ -89,22 +89,22 @@ async function getOrgId(): Promise<string | undefined> {
 
   // Fall back to stored org ID
   return getStoredOrgId();
-}
+};
 
 // Get current conversation ID from URL
-async function getCurrentConversationId(): Promise<string | null> {
+const getCurrentConversationId = async (): Promise<string | null> => {
   const [tab] = await queryTabs({ active: true, currentWindow: true });
   if (!tab || !tab.url) return null;
   const url = new URL(tab.url);
   const match = url.pathname.match(/\/chat\/([a-f0-9-]+)/);
   return match ? match[1] : null;
-}
+};
 
 // Show status message
-function showStatus(
+const showStatus = (
   message: string,
   type: 'error' | 'info' | 'success' = 'info',
-): void {
+): void => {
   const statusEl = document.getElementById('status');
   if (!statusEl) return;
   statusEl.className = `status ${type}`;
@@ -147,15 +147,15 @@ function showStatus(
       statusEl.className = '';
     }, 3000);
   }
-}
+};
 
-async function checkClaudeAccess(): Promise<void> {
+const checkClaudeAccess = async (): Promise<void> => {
   const notice = document.getElementById('claudeAccessNotice');
   if (!notice) return;
 
   const granted = await hasClaudeAccess();
   notice.style.display = granted ? 'none' : 'block';
-}
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Pull the popup title + version from the manifest so the testing branch
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     'includeArtifacts',
   ) as HTMLInputElement | null;
 
-  function updateCheckboxStates(): void {
+  const updateCheckboxStates = (): void => {
     if (
       !includeChatsCheckbox ||
       !includeThinkingCheckbox ||
@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       includeMetadataCheckbox.checked = false;
       includeArtifactsCheckbox.checked = false;
     }
-  }
+  };
 
   includeChatsCheckbox?.addEventListener('change', updateCheckboxStates);
   updateCheckboxStates(); // Initialize on load

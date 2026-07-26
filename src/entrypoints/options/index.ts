@@ -18,22 +18,22 @@ import {
 // Capture unhandled errors for diagnostics (sanitized, stored in chrome.storage.local)
 initErrorCapture('options');
 
-function showStatus(
+const showStatus = (
   elementId: string,
   message: string,
   type: 'error' | 'success',
-): void {
+): void => {
   const statusEl = document.getElementById(elementId);
   if (!statusEl) return;
   statusEl.textContent = message;
   statusEl.className = `status ${type}`;
-}
+};
 
-function hideStatus(elementId: string): void {
+const hideStatus = (elementId: string): void => {
   const statusEl = document.getElementById(elementId);
   if (!statusEl) return;
   statusEl.className = 'status';
-}
+};
 
 // Load saved settings
 document.addEventListener('DOMContentLoaded', () => {
@@ -173,7 +173,7 @@ document
   });
 
 // Date & Time format preferences (displayed in the browse view)
-function loadDateTimeFormatPrefs(): void {
+const loadDateTimeFormatPrefs = (): void => {
   storageGet<{ dateFormat?: string; timeFormat?: string }>('local', [
     'dateFormat',
     'timeFormat',
@@ -187,7 +187,7 @@ function loadDateTimeFormatPrefs(): void {
     if (dateFormatSelect) dateFormatSelect.value = result.dateFormat || 'mdy';
     if (timeFormatSelect) timeFormatSelect.value = result.timeFormat || '12h';
   });
-}
+};
 loadDateTimeFormatPrefs();
 
 document.getElementById('dateFormatSelect')?.addEventListener('change', (e) => {
@@ -213,7 +213,7 @@ document.getElementById('timeFormatSelect')?.addEventListener('change', (e) => {
 });
 
 // Model display preference (browse view's Model column)
-function loadModelDisplayPref(): void {
+const loadModelDisplayPref = (): void => {
   storageGet<{ modelDisplay?: string }>('local', ['modelDisplay']).then(
     (result) => {
       const value = result.modelDisplay === 'current' ? 'current' : 'original';
@@ -223,7 +223,7 @@ function loadModelDisplayPref(): void {
       if (radio) radio.checked = true;
     },
   );
-}
+};
 loadModelDisplayPref();
 
 document
@@ -267,14 +267,14 @@ document
 // The options page is extension-origin, the same as the background worker, so
 // it reads the cache directly rather than relaying through it.
 
-function formatBytes(bytes: number): string {
+const formatBytes = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   if (bytes < 1024 * 1024 * 1024)
     return `${Math.round(bytes / (1024 * 1024))} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
+};
 
-async function refreshCacheStats(): Promise<void> {
+const refreshCacheStats = async (): Promise<void> => {
   const el = document.getElementById('cacheStats');
   if (!el) return;
 
@@ -297,7 +297,7 @@ async function refreshCacheStats(): Promise<void> {
   } catch {
     el.textContent = 'Cache unavailable.';
   }
-}
+};
 
 document.addEventListener('DOMContentLoaded', () => {
   void refreshCacheStats();
