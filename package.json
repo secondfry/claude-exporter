@@ -19,6 +19,7 @@
   "devDependencies": {
     "@types/chrome": "^0.0.280",
     "@types/node": "^26.1.1",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^3.2.4"

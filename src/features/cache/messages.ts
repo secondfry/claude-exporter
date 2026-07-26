@@ -1,0 +1,87 @@
+// The wire contract for reaching the Chat Cache from a context that cannot
+// open it directly.
+//
+// IndexedDB is partitioned by origin. The browse page and the background
+// worker are both extension-origin, so they share one database; the content
+// script runs on claude.ai and would otherwise build a second, duplicate cache
+// of the same conversations. Since the ADR-0002 sizing argument is the whole
+// reason the cache is not in chrome.storage.local, storing it twice is not an
+// acceptable outcome — the content script goes through the background worker
+// instead. See docs/adr/0003.
+
+import type { Conversation } from '../conversation/types';
+
+/** Refused for want of space; the export itself is unaffected. */
+type CacheWriteStatus = 'stored' | 'quota' | 'unavailable';
+
+interface CacheReadRequest {
+  action: 'cacheRead';
+  uuid: string;
+  updatedAt: string;
+}
+
+interface CacheWriteRequest {
+  action: 'cacheWrite';
+  conversation: Conversation;
+}
+
+interface CacheStatsRequest {
+  action: 'cacheStats';
+}
+
+interface CacheClearRequest {
+  action: 'cacheClear';
+}
+
+type CacheRequest =
+  | CacheReadRequest
+  | CacheWriteRequest
+  | CacheStatsRequest
+  | CacheClearRequest;
+
+interface CacheReadResponse {
+  success: true;
+  conversation: Conversation | null;
+}
+
+interface CacheWriteResponse {
+  success: true;
+  status: CacheWriteStatus;
+}
+
+interface CacheStats {
+  entries: number;
+  /** Bytes this origin is using across all storage, when the browser says. */
+  usageBytes: number | null;
+  quotaExceeded: boolean;
+}
+
+interface CacheStatsResponse {
+  success: true;
+  stats: CacheStats;
+}
+
+/**
+ * What a context asks of the cache. Two implementations satisfy it: one
+ * talking to IndexedDB directly, one relaying to the background worker.
+ * Neither ever rejects — a broken cache degrades to a miss, never to a
+ * failed export.
+ */
+interface CachePort {
+  read(uuid: string, updatedAt: string | undefined): Promise<Conversation | null>;
+  write(conversation: Conversation): Promise<CacheWriteStatus>;
+}
+
+export type {
+  CacheClearRequest,
+  CachePort,
+  CacheReadRequest,
+  CacheReadResponse,
+  CacheRequest,
+  CacheStats,
+  CacheStatsRequest,
+  CacheStatsResponse,
+  CacheWriteRequest,
+  CacheWriteResponse,
+  CacheWriteStatus,
+};
