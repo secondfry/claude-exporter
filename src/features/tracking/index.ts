@@ -257,21 +257,28 @@ const nextSnapshot = (
   };
 };
 
+/**
+ * Each change is folded into the running set before the next is computed, so a
+ * uuid appearing twice in one batch chains rather than overwriting. Reading
+ * every entry against the pre-batch state instead would let the last occurrence
+ * win, erasing the bounce it was there to record and rewriting `firstSeen` —
+ * the one field this store promises never to rewrite.
+ */
 const collectSnapshotChanges = (
   conversations: readonly ConversationSummary[],
   snapshots: ModelSnapshots,
   now: string,
 ): Array<[string, ModelSnapshot]> => {
-  const changes: Array<[string, ModelSnapshot]> = [];
+  const changes = new Map<string, ModelSnapshot>();
   for (const conv of conversations) {
     const model = conv?.model;
     const id = conv?.uuid;
     if (!model || !id) continue; // skip null-model chats — don't snapshot a guess
 
-    const next = nextSnapshot(snapshots[id], model, now);
-    if (next) changes.push([id, next]);
+    const next = nextSnapshot(changes.get(id) ?? snapshots[id], model, now);
+    if (next) changes.set(id, next);
   }
-  return changes;
+  return [...changes];
 };
 
 // Snapshot each conversation's current model so it survives a model bounce

@@ -216,7 +216,9 @@ describe('initErrorCapture', () => {
   describe('unhandledrejection', () => {
     it("uses an Error reason's message and stack", async () => {
       const listeners = capture();
-      const reason = new Error('rejected for 11111111-2222-3333-4444-555555555555');
+      const reason = new Error(
+        'rejected for 11111111-2222-3333-4444-555555555555',
+      );
       reason.stack = 'stack 11111111-2222-3333-4444-555555555555';
 
       listeners.get('unhandledrejection')?.({ reason });

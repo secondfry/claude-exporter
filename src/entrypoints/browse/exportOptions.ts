@@ -5,14 +5,22 @@
 // an `as` assertion, i.e. a promise the DOM cannot keep), and the rule that
 // three options only mean anything while chats are being included.
 
+import { toExportFormat } from '$features/export/formats';
 import type { ExportFormat, ExportOptions } from '$features/export/types';
 
 import { requireInput, requireSelect } from './dom';
 
-/** A <select> can hold any string; only three of them are formats we emit. */
-const asExportFormat = (value: string): ExportFormat => {
-  return value === 'json' || value === 'text' ? value : 'markdown';
-};
+/**
+ * The fallback for an unrecognised <select> value. It must match what the
+ * popup ends up with: both read the same control, and a private copy of this
+ * rule here once made the same value export as Markdown from browse and JSON
+ * from the popup. `toExportFormat` is the single validator; only the default
+ * is a page-level choice, and browse's form defaults to Markdown.
+ */
+const FALLBACK_FORMAT: ExportFormat = 'markdown';
+
+const asExportFormat = (value: string): ExportFormat =>
+  toExportFormat(value) ?? FALLBACK_FORMAT;
 
 /**
  * Thinking blocks, metadata and inline artifacts are all parts of a chat

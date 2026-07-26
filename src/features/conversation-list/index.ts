@@ -145,7 +145,10 @@ const createConversationList = (): ConversationList => {
     b: ConversationSummary,
   ): number => {
     for (const { direction, field } of sortStack) {
-      const comparison = compareValues(sortValue(a, field), sortValue(b, field));
+      const comparison = compareValues(
+        sortValue(a, field),
+        sortValue(b, field),
+      );
       if (comparison === 0) continue;
       return direction === 'asc' ? comparison : -comparison;
     }

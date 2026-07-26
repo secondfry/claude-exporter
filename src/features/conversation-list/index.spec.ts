@@ -347,9 +347,21 @@ describe('createConversationList', () => {
     it('a tie on every criterion preserves input order (the comparator returns 0)', () => {
       const list = setup();
       list.setConversations([
-        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'a' }),
-        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'b' }),
-        conv({ created_at: '2024-01-01T00:00:00.000Z', name: 'same', uuid: 'c' }),
+        conv({
+          created_at: '2024-01-01T00:00:00.000Z',
+          name: 'same',
+          uuid: 'a',
+        }),
+        conv({
+          created_at: '2024-01-01T00:00:00.000Z',
+          name: 'same',
+          uuid: 'b',
+        }),
+        conv({
+          created_at: '2024-01-01T00:00:00.000Z',
+          name: 'same',
+          uuid: 'c',
+        }),
       ]);
       list.toggleSort('name');
       list.toggleSort('created');

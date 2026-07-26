@@ -159,18 +159,25 @@ interface ArtifactKind {
 // Anything not listed here — including a type we do not recognise — is treated
 // as opaque text, and its `language=` attribute is ignored. Only the untyped
 // legacy form (`<antArtifact language="python">`) trusts that attribute alone.
-const ARTIFACT_KIND_BY_TYPE: Record<string, ArtifactKind> = {
-  'application/vnd.ant.code': { artifactType: 'code', language: null },
-  'application/vnd.ant.mermaid': {
-    artifactType: 'document',
-    language: 'mermaid',
-  },
-  'application/vnd.ant.react': { artifactType: 'code', language: 'jsx' },
-  'image/svg+xml': { artifactType: 'code', language: 'svg' },
-  'text/css': { artifactType: 'code', language: 'css' },
-  'text/html': { artifactType: 'code', language: 'html' },
-  'text/markdown': { artifactType: 'document', language: 'markdown' },
-};
+// A Map, not an object literal: the key comes straight out of a `type="..."`
+// attribute in model output, and on an object literal a key of `toString` or
+// `constructor` resolves to something inherited from Object.prototype, so the
+// `?? DEFAULT_ARTIFACT_KIND` fallback never fires and the artifact renders
+// with `**Type:** undefined`. A Map has no prototype chain to fall through.
+const ARTIFACT_KIND_BY_TYPE = new Map<string, ArtifactKind>(
+  Object.entries({
+    'application/vnd.ant.code': { artifactType: 'code', language: null },
+    'application/vnd.ant.mermaid': {
+      artifactType: 'document',
+      language: 'mermaid',
+    },
+    'application/vnd.ant.react': { artifactType: 'code', language: 'jsx' },
+    'image/svg+xml': { artifactType: 'code', language: 'svg' },
+    'text/css': { artifactType: 'code', language: 'css' },
+    'text/html': { artifactType: 'code', language: 'html' },
+    'text/markdown': { artifactType: 'document', language: 'markdown' },
+  }),
+);
 
 const DEFAULT_ARTIFACT_KIND: ArtifactKind = {
   artifactType: 'text',
@@ -188,7 +195,7 @@ const resolveArtifactKind = (
     return { artifactType: 'code', language: language };
   }
 
-  const kind = ARTIFACT_KIND_BY_TYPE[type] ?? DEFAULT_ARTIFACT_KIND;
+  const kind = ARTIFACT_KIND_BY_TYPE.get(type) ?? DEFAULT_ARTIFACT_KIND;
   return {
     artifactType: kind.artifactType,
     language: kind.language ?? language ?? 'txt',

@@ -309,23 +309,39 @@ const showImportModeModal = (): Promise<ImportMode | null> => {
 
 // Import extension storage from a file produced by backupExtensionData.
 // Validates the file, then writes to local + sync using the supplied mode.
+/**
+ * A result rather than a bare value, because "not JSON at all" earns a
+ * different sentence from "JSON, but not a backup" — the first usually means
+ * the user picked the wrong file, the second that they picked the wrong
+ * export. Undefined would collapse the two.
+ */
+const parseBackupJson = async (
+  file: File,
+): Promise<{ ok: false } | { ok: true; value: unknown }> => {
+  try {
+    return { ok: true, value: JSON.parse(await file.text()) };
+  } catch (error) {
+    console.warn(new Error('Backup file is not valid JSON', { cause: error }));
+    return { ok: false };
+  }
+};
+
 // The mode choice is made BEFORE the file picker opens (see
 // showImportModeModal), so this function just executes.
 const importBackup = async (
   file: File,
   mode: ImportMode,
 ): Promise<BackupOutcome> => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await file.text());
-  } catch {
+  const parsed = await parseBackupJson(file);
+  if (!parsed.ok) {
     return {
       message: 'Import failed: the file is not valid JSON.',
       success: false,
     };
   }
 
-  if (!isBackupFile(parsed)) {
+  const backup = parsed.value;
+  if (!isBackupFile(backup)) {
     return {
       message:
         'Import failed: this does not look like a Claude Exporter backup file.',
@@ -333,15 +349,15 @@ const importBackup = async (
     };
   }
 
-  const snapCount = countEntries(parsed.local.modelSnapshots);
-  const exportCount = countEntries(parsed.local.exportTimestamps);
-  const syncData = isPlainObject(parsed.sync) ? parsed.sync : {};
+  const snapCount = countEntries(backup.local.modelSnapshots);
+  const exportCount = countEntries(backup.local.exportTimestamps);
+  const syncData = isPlainObject(backup.sync) ? backup.sync : {};
   const tail =
     'Reload any open Claude pages and the browse page to see the changes.';
 
   try {
     if (mode === 'replace') {
-      await storageSet('local', parsed.local);
+      await storageSet('local', backup.local);
       await storageSet('sync', syncData);
       return {
         message: `Import complete (replace) — ${snapCount} model snapshot(s), ${exportCount} export record(s) restored. ${tail}`,
@@ -356,7 +372,7 @@ const importBackup = async (
     const currentSync = await storageGet<Record<string, unknown>>('sync', null);
     await storageSet(
       'local',
-      mergeStorageData(currentLocal ?? {}, parsed.local),
+      mergeStorageData(currentLocal ?? {}, backup.local),
     );
     await storageSet('sync', mergeStorageData(currentSync ?? {}, syncData));
     return {

@@ -185,8 +185,11 @@ const displayConversations = (): void => {
   wireSortableHeaders();
   updateExportButtonText();
 
+  // An empty View has nothing to Export. Enabling the button anyway opens the
+  // progress modal on "Exporting 0 conversations..." and then fails — which is
+  // what a brand-new account saw.
   const exportAllBtn = getButton('exportAllBtn');
-  if (exportAllBtn) exportAllBtn.disabled = false;
+  if (exportAllBtn) exportAllBtn.disabled = list.view().length === 0;
 };
 
 // ---------------------------------------------------------------------------

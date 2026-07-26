@@ -1,6 +1,6 @@
 {
   "name": "claude-exporter",
-  "version": "1.22.3",
+  "version": "1.22.4",
   "private": true,
   "type": "module",
   "description": "Export conversations and artifacts from Claude.ai",

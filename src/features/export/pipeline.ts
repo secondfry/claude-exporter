@@ -268,15 +268,26 @@ const loadConversation = async (
 };
 
 /**
+ * What the load told us about the Chat Cache, kept apart from whether the
+ * target went on to render. Null means the load itself threw, so it learned
+ * nothing — a distinction the run-level totals depend on: a conversation that
+ * was fetched and cached still counts as fetched and cached even if rendering
+ * it failed a moment later.
+ */
+interface LoadRecord {
+  cached: boolean;
+  quota: boolean;
+}
+
+/**
  * What one target turned into. Collecting these and reducing once at the end
  * is what keeps the batch loop free of shared mutable counters — the shape
  * that used to make partial-failure accounting hard to follow.
  */
 interface TargetSucceeded {
-  cached: boolean;
   entries: ExportEntry[];
+  load: LoadRecord;
   ok: true;
-  quota: boolean;
   resolvedName: string;
   uuid: string;
 }
@@ -284,6 +295,8 @@ interface TargetSucceeded {
 interface TargetFailed {
   error: unknown;
   failedName: string;
+  /** Null when the load is what failed; set when rendering failed after it. */
+  load: LoadRecord | null;
   ok: false;
 }
 
@@ -297,7 +310,36 @@ const failed = (outcome: TargetOutcome): outcome is TargetFailed => {
   return !outcome.ok;
 };
 
-/** Never rejects: a failure is a value, so one bad target cannot sink a batch. */
+type LoadAttempt =
+  | { data: Conversation; load: LoadRecord; ok: true }
+  | { error: unknown; ok: false };
+
+/** Never rejects. Owns the only try around the fetch/cache half of a target. */
+const attemptLoad = async (
+  orgId: string,
+  target: ExportTarget,
+  hooks: ExportHooks | undefined,
+): Promise<LoadAttempt> => {
+  try {
+    const { cached, data, quota } = await loadConversation(
+      orgId,
+      target,
+      hooks,
+    );
+    return { data, load: { cached, quota }, ok: true };
+  } catch (error) {
+    return { error, ok: false };
+  }
+};
+
+/**
+ * Never rejects: a failure is a value, so one bad target cannot sink a batch.
+ *
+ * Loading and rendering are attempted separately so a rendering failure still
+ * reports what the load learned. Folding both into one try lost it, and what
+ * was lost was the cache-full warning — the export would fail one conversation
+ * and silently stop telling the user their disk was full.
+ */
 const runTarget = async (
   orgId: string,
   target: ExportTarget,
@@ -305,23 +347,25 @@ const runTarget = async (
   hooks: ExportHooks | undefined,
   nest: boolean,
 ): Promise<TargetOutcome> => {
+  const failedName = target.name || target.uuid;
+
+  const attempt = await attemptLoad(orgId, target, hooks);
+  if (!attempt.ok) {
+    return { error: attempt.error, failedName, load: null, ok: false };
+  }
+
+  const { data, load } = attempt;
   try {
-    const { cached, data, quota } = await loadConversation(
-      orgId,
-      target,
-      hooks,
-    );
     data.model = inferModel(data);
     return {
-      cached,
       entries: buildEntries(target, data, options, nest),
+      load,
       ok: true,
-      quota,
       resolvedName: data.name || target.name || target.uuid,
       uuid: target.uuid,
     };
   } catch (error) {
-    return { error, failedName: target.name || target.uuid, ok: false };
+    return { error, failedName, load, ok: false };
   }
 };
 
@@ -336,7 +380,7 @@ const pauseBetweenBatches = async (
   signal: AbortSignal | undefined,
 ): Promise<void> => {
   if (!more) return;
-  if (!batch.some((outcome) => succeeded(outcome) && !outcome.cached)) return;
+  if (!batch.some((outcome) => outcome.load && !outcome.load.cached)) return;
   throwIfAborted(signal);
   await delay(INTER_BATCH_DELAY_MS);
 };
@@ -350,14 +394,18 @@ const reportFetchProgress = (
   hooks?.onProgress?.({
     completed: done.length,
     failed: outcomes.length - done.length,
-    fromCache: done.filter((outcome) => outcome.cached).length,
+    fromCache: outcomes.filter((outcome) => outcome.load?.cached).length,
     phase: 'fetching',
     total,
   });
 };
 
 interface FetchOutcome {
-  /** Conversations answered from the cache, so never requested over the network. */
+  /**
+   * Conversations answered from the cache, so never requested over the
+   * network. Counted at load time: a conversation that came from the cache
+   * and then failed to render still did not touch the network.
+   */
   cacheHits: number;
   cacheQuotaExceeded: boolean;
   entries: ExportEntry[];
@@ -385,8 +433,8 @@ const summarise = (outcomes: TargetOutcome[]): FetchOutcome => {
   const contributing = done.filter((outcome) => outcome.entries.length > 0);
 
   return {
-    cacheHits: done.filter((outcome) => outcome.cached).length,
-    cacheQuotaExceeded: done.some((outcome) => outcome.quota),
+    cacheHits: outcomes.filter((outcome) => outcome.load?.cached).length,
+    cacheQuotaExceeded: outcomes.some((outcome) => outcome.load?.quota),
     entries: contributing.flatMap((outcome) => outcome.entries),
     failedNames: outcomes.filter(failed).map((outcome) => outcome.failedName),
     firstError: outcomes.filter(failed)[0]?.error,

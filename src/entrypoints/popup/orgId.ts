@@ -4,12 +4,7 @@ import type {
   FailureResponse,
 } from '$entrypoints/content/messages';
 import { detectOrgId } from '$features/conversation/api';
-import {
-  queryTabs,
-  sendMessageToTab,
-  storageGet,
-  storageSet,
-} from '$platform';
+import { queryTabs, sendMessageToTab, storageGet, storageSet } from '$platform';
 
 // Resolving the organization ID has three routes of decreasing reliability,
 // and every one of them can fail for a reason the user cannot act on. Kept

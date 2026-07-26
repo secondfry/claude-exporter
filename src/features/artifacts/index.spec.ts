@@ -456,3 +456,20 @@ describe('isProgrammingLanguage', () => {
     expect(isProgrammingLanguage('markdown')).toBe(false);
   });
 });
+
+// Regression: the MIME-type cascade became a lookup, and a lookup on an object
+// literal inherits from Object.prototype. A type attribute of `toString` found
+// a truthy inherited value, so the default never applied.
+describe('resolveArtifactKind — keys that collide with Object.prototype', () => {
+  for (const type of ['toString', 'constructor', 'valueOf', 'hasOwnProperty']) {
+    it(`treats type="${type}" as an unrecognised type, not an inherited member`, () => {
+      const artifacts = extractArtifactsFromText(
+        `<antArtifact identifier="id1" title="Ti" type="${type}" language="python">BODY</antArtifact>`,
+      );
+
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0].type).toBe('text');
+      expect(artifacts[0].language).toBe('txt');
+    });
+  }
+});

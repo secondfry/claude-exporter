@@ -850,3 +850,119 @@ describe('batched fetching', () => {
     expect(recordExports).not.toHaveBeenCalled();
   });
 });
+
+// Regression suite for the collect-then-reduce rewrite of fetchAll. Folding
+// the load and the render into a single try made a render failure erase what
+// the load had already learned, and every one of these passed against the
+// broken version because the existing tests only ever failed at load time.
+describe('a target that loads but fails to render', () => {
+  const failRenderOf = (...uuids: string[]): void => {
+    vi.mocked(extractArtifactFiles).mockImplementation((data: Conversation) => {
+      if (uuids.includes(data.uuid))
+        throw new Error(`bad content ${data.uuid}`);
+      return [];
+    });
+  };
+
+  beforeEach(() => {
+    vi.mocked(fetchConversation).mockImplementation(
+      (_orgId: string, uuid: string) =>
+        Promise.resolve(
+          conversation(uuid, `chat ${uuid.slice('uuid-'.length)}`),
+        ),
+    );
+  });
+
+  // The cache filling up is the user's disk filling up. Losing the warning
+  // because an unrelated conversation failed to render means every later
+  // export silently refetches over the network with nothing said.
+  it('still reports cacheQuotaExceeded when the quota was hit before the failure', async () => {
+    const port = {
+      read: vi.fn(() => Promise.resolve(null)),
+      write: vi.fn((conv: Conversation) =>
+        Promise.resolve(
+          conv.uuid === 'uuid-0' ? ('quota' as const) : ('stored' as const),
+        ),
+      ),
+    };
+    failRenderOf('uuid-0');
+
+    const result = await exportConversations(
+      'org',
+      named(2),
+      options({ extractArtifacts: true }),
+      {
+        cache: port,
+      },
+    );
+
+    expect(result.failedNames).toEqual(['chat 0']);
+    expect(result.cacheQuotaExceeded).toBe(true);
+  });
+
+  // A conversation served from the cache did not touch the network, whatever
+  // happened to it afterwards.
+  it('still counts a cache hit that later failed to render', async () => {
+    const { port } = fakeCache([
+      conversation('uuid-0', 'chat 0'),
+      conversation('uuid-1', 'chat 1'),
+    ]);
+    failRenderOf('uuid-0');
+
+    const result = await exportConversations(
+      'org',
+      named(2),
+      options({ extractArtifacts: true }),
+      {
+        cache: port,
+      },
+    );
+
+    expect(result.failedNames).toEqual(['chat 0']);
+    expect(result.fromCache).toBe(2);
+    expect(fetchConversation).not.toHaveBeenCalled();
+  });
+
+  // The inter-batch pause exists to avoid rate-limiting. A batch that hit the
+  // network and then failed has hit the network hardest of all, so skipping
+  // the pause after it is exactly backwards.
+  it('still pauses between batches when the network was hit but nothing rendered', async () => {
+    failRenderOf('uuid-0', 'uuid-1', 'uuid-2');
+    const started = Date.now();
+
+    const result = await exportConversations(
+      'org',
+      named(4),
+      options({ extractArtifacts: true }),
+    );
+
+    expect(result.failedNames).toEqual(['chat 0', 'chat 1', 'chat 2']);
+    expect(fetchConversation).toHaveBeenCalledTimes(4);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1);
+  });
+
+  // A load that never returned learned nothing, so it must not be counted as
+  // a cache hit — the mirror image of the cases above.
+  it('counts nothing for a target whose load itself threw', async () => {
+    vi.mocked(fetchConversation).mockImplementation(
+      (_orgId: string, uuid: string) => {
+        if (uuid === 'uuid-0') return Promise.reject(new Error('HTTP 500'));
+        return Promise.resolve(conversation(uuid, `chat ${uuid.slice(5)}`));
+      },
+    );
+    const { port } = fakeCache();
+
+    const result = await exportConversations(
+      'org',
+      named(2),
+      options({ extractArtifacts: true }),
+      {
+        cache: port,
+      },
+    );
+
+    expect(result.failedNames).toEqual(['chat 0']);
+    expect(result.fromCache).toBe(0);
+    expect(result.cacheQuotaExceeded).toBe(false);
+  });
+});

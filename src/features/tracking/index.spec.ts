@@ -613,3 +613,45 @@ describe('tracking', () => {
     });
   });
 });
+
+// Regression: computing every change against the pre-batch snapshot let the
+// last occurrence of a uuid win, so a model bounce inside a single batch was
+// erased and `firstSeen` — the field this store promises never to rewrite —
+// was rewritten to the later model.
+describe('recordModelSnapshots — the same uuid twice in one batch', () => {
+  const readSnapshots = async () => {
+    const { modelSnapshots } = await storageGet<{
+      modelSnapshots: Record<
+        string,
+        {
+          current: string;
+          firstSeen: string;
+          history: Array<{ at: string; model: string }>;
+        }
+      >;
+    }>('local', ['modelSnapshots']);
+    return modelSnapshots;
+  };
+
+  it('chains the two observations instead of letting the last one win', async () => {
+    await recordModelSnapshots([
+      conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus-4'),
+      conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus-5'),
+    ]);
+
+    const snapshots = await readSnapshots();
+    expect(snapshots.c1.firstSeen).toBe('claude-opus-4');
+    expect(snapshots.c1.current).toBe('claude-opus-5');
+    expect(snapshots.c1.history).toHaveLength(2);
+  });
+
+  it('records nothing extra when the repeat carries the same model', async () => {
+    await recordModelSnapshots([
+      conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus-4'),
+      conv('c1', '2026-01-02T00:00:00.000Z', 'claude-opus-4'),
+    ]);
+
+    const snapshots = await readSnapshots();
+    expect(snapshots.c1.history).toHaveLength(1);
+  });
+});

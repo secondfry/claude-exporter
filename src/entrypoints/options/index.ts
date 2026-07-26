@@ -95,6 +95,10 @@ const runConnectionTest = async (orgId: string): Promise<void> => {
       'success',
     );
   } catch (error) {
+    // The user gets a plain sentence; the console keeps the original, because
+    // connectionErrorMessage flattens a 401 and a DNS failure into the same
+    // advice and there is nothing else left to diagnose from.
+    console.warn(new Error('Connection test failed', { cause: error }));
     showStatus('testStatus', connectionErrorMessage(error), 'error');
   }
 };

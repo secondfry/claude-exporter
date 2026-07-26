@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { EXPORT_FORMATS, isExportFormat } from '$features/export/formats';
+
 import {
   asExportFormat,
   CHAT_DEPENDENT_IDS,
@@ -53,5 +55,31 @@ describe('browse/exportOptions', () => {
       'includeMetadata',
       'includeArtifacts',
     ]);
+  });
+});
+
+// CLAUDE.md names this failure mode directly: two callers of the one export
+// pipeline that each kept a private copy and drifted. Browse and the popup
+// read the same <select>, and browse's hand-written copy of the format rule
+// disagreed with the popup's on the fallback — the same unrecognised value
+// exported as Markdown from one page and JSON from the other.
+describe('asExportFormat agrees with the shared validator', () => {
+  it('accepts every format the pipeline declares, unchanged', () => {
+    for (const format of EXPORT_FORMATS) {
+      expect(asExportFormat(format)).toBe(format);
+    }
+  });
+
+  it('accepts nothing the shared validator rejects', () => {
+    for (const value of ['pdf', '', 'JSON', 'markdown ']) {
+      expect(isExportFormat(value)).toBe(false);
+      expect(asExportFormat(value)).toBe('markdown');
+    }
+  });
+
+  // The fallback is browse's own choice — its form defaults to Markdown — but
+  // it must be a format the pipeline actually emits.
+  it('falls back to a format the pipeline declares', () => {
+    expect(isExportFormat(asExportFormat('nonsense'))).toBe(true);
   });
 });

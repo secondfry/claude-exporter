@@ -18,6 +18,11 @@ import {
 } from '$platform';
 
 import { getButton, readCheckbox, readSelectValue } from './dom';
+import {
+  describeBulkExport,
+  describeConversationExport,
+} from './exportOutcome';
+import type { StatusMessage } from './exportOutcome';
 import { getClaudeTab, getOrgId } from './orgId';
 import { initTheme } from './theme';
 
@@ -178,18 +183,21 @@ const readSharedExportOptions = () => ({
 const dispatchExport = async (
   tabId: number,
   request: ExportAllConversationsRequest | ExportConversationRequest,
-  describeSuccess: (response: ContentExportResponse) => string,
+  describeSuccess: (response: ContentExportResponse) => StatusMessage,
 ): Promise<void> => {
   const response = await sendMessageToTab<ExportResponse>(tabId, request);
 
   if (!response?.success) {
     const message = response?.error || 'Export failed';
-    console.error('Export failed:', message);
+    console.error(new Error(`Export failed: ${message}`));
     showStatus(message, 'error');
     return;
   }
 
-  showStatus(describeSuccess(response), 'success');
+  // The describer chooses the type, not just the text: a partial failure names
+  // the conversations that did not make it and must not be auto-cleared.
+  const { message, type } = describeSuccess(response);
+  showStatus(message, type);
 };
 
 // Guards shared by both handlers: an org ID and a claude.ai tab to send to.
@@ -230,7 +238,7 @@ const runExport = async (
   try {
     await perform();
   } catch (error) {
-    console.error('Export failed:', error);
+    console.error(new Error('Export failed', { cause: error }));
     showStatus(describeError(error), 'error');
   } finally {
     if (button) button.disabled = false;
@@ -238,38 +246,32 @@ const runExport = async (
 };
 
 // Export current conversation
-document
-  .getElementById('exportCurrent')
-  ?.addEventListener('click', () => {
-    void runExport('exportCurrent', 'Fetching conversation...', async () => {
-      const { orgId, tabId } = await requireExportContext();
+document.getElementById('exportCurrent')?.addEventListener('click', () => {
+  void runExport('exportCurrent', 'Fetching conversation...', async () => {
+    const { orgId, tabId } = await requireExportContext();
 
-      const conversationId = await getCurrentConversationId();
-      if (!conversationId) {
-        throw new Error(
-          'Could not detect conversation ID. Make sure you are on a claude.ai conversation page.',
-        );
-      }
-
-      // tab.title on claude.ai carries a site suffix (e.g. " - Claude") that
-      // would need brittle stripping to recover the bare conversation name,
-      // so it is intentionally not sent here. The pipeline's own fetched
-      // conversation name is the reliable source (see pipeline.ts).
-      const request: ExportConversationRequest = {
-        action: 'exportConversation',
-        ...readSharedExportOptions(),
-        conversationId,
-        includeThinking: readCheckbox('includeThinking'),
-        orgId,
-      };
-
-      await dispatchExport(
-        tabId,
-        request,
-        () => 'Conversation exported successfully!',
+    const conversationId = await getCurrentConversationId();
+    if (!conversationId) {
+      throw new Error(
+        'Could not detect conversation ID. Make sure you are on a claude.ai conversation page.',
       );
-    });
+    }
+
+    // tab.title on claude.ai carries a site suffix (e.g. " - Claude") that
+    // would need brittle stripping to recover the bare conversation name,
+    // so it is intentionally not sent here. The pipeline's own fetched
+    // conversation name is the reliable source (see pipeline.ts).
+    const request: ExportConversationRequest = {
+      action: 'exportConversation',
+      ...readSharedExportOptions(),
+      conversationId,
+      includeThinking: readCheckbox('includeThinking'),
+      orgId,
+    };
+
+    await dispatchExport(tabId, request, describeConversationExport);
   });
+});
 
 // Browse conversations
 document
@@ -289,11 +291,7 @@ document.getElementById('exportAll')?.addEventListener('click', () => {
       orgId,
     };
 
-    await dispatchExport(tabId, request, (response) =>
-      response.warnings
-        ? response.warnings
-        : `Exported ${response.count} conversations!`,
-    );
+    await dispatchExport(tabId, request, describeBulkExport);
   });
 });
 
